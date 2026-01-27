@@ -87,12 +87,35 @@ const chronoInit = (reset) => {
 // ==========================================================================
 // ==== time list handling
 
+// Creates default car objects for a round that was never raced
+const buildEmptyCars = (mindex, rindex) => {
+    const round = mancheList[mindex][rindex];
+    return round.map((playerId) => ({
+        playerId: playerId,
+        startLane: 0,
+        nextLane: 0,
+        lapCount: 0,
+        startTimestamp: 0,
+        currTimestamp: 0,
+        endTimestamp: 0,
+        currTime: 0,
+        splitTimes: [],
+        position: 0,
+        delayFromFirst: 0,
+        speed: 0,
+        outOfBounds: false
+    }));
+};
+
 const disqualify = (mindex, rindex, pindex) => {
     console.log('client.disqualify called');
 
     mindex = mindex || currManche;
     rindex = rindex || currRound;
-    const cars = storage.loadRound(mindex, rindex);
+    let cars = storage.loadRound(mindex, rindex);
+    if (!cars) {
+        cars = buildEmptyCars(mindex, rindex);
+    }
     cars[pindex].originalTime = cars[pindex].currTime;
     cars[pindex].currTime = 99999;
     storage.saveRound(mindex, rindex, cars);
@@ -105,29 +128,25 @@ const disqualify = (mindex, rindex, pindex) => {
 // Reads all input fields in the manches tab and rebuilds time list
 const overrideTimes = () => {
     console.log('client.overrideTimes called');
-    console.log('overrideTimes: mancheList length=', mancheList ? mancheList.length : 'null/undefined');
 
     let time, newTime, oldTime, cars;
     _.each(mancheList, (manche, mindex) => {
-        console.log(`overrideTimes: manche ${mindex}, rounds=${manche ? manche.length : 'null'}`);
         _.each(manche, (round, rindex) => {
             cars = storage.loadRound(mindex, rindex);
-            console.log(`overrideTimes: m${mindex} r${rindex} cars=`, cars ? cars.length : 'undefined');
-            if (cars) {
-                _.each(round, (_playerId, pindex) => {
-                    time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
-                    console.log(`overrideTimes: m${mindex} r${rindex} p${pindex} input='${time}'`);
-                    if (time) {
-                        newTime = utils.safeTime(time);
-                        oldTime = cars[pindex].currTime;
-                        console.log(`overrideTimes: m${mindex} r${rindex} p${pindex} old=${oldTime} new=${newTime}`);
-                        if (newTime !== oldTime) {
-                            cars[pindex].originalTime = oldTime;
-                            cars[pindex].currTime = newTime;
-                        }
-                    }
-                });
+            if (!cars) {
+                cars = buildEmptyCars(mindex, rindex);
             }
+            _.each(round, (_playerId, pindex) => {
+                time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
+                if (time) {
+                    newTime = utils.safeTime(time);
+                    oldTime = cars[pindex].currTime;
+                    if (newTime !== oldTime) {
+                        cars[pindex].originalTime = oldTime;
+                        cars[pindex].currTime = newTime;
+                    }
+                }
+            });
             storage.saveRound(mindex, rindex, cars);
         });
     });
