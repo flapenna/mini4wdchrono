@@ -105,17 +105,22 @@ const disqualify = (mindex, rindex, pindex) => {
 // Reads all input fields in the manches tab and rebuilds time list
 const overrideTimes = () => {
     console.log('client.overrideTimes called');
+    console.log('overrideTimes: mancheList length=', mancheList ? mancheList.length : 'null/undefined');
 
     let time, newTime, oldTime, cars;
     _.each(mancheList, (manche, mindex) => {
+        console.log(`overrideTimes: manche ${mindex}, rounds=${manche ? manche.length : 'null'}`);
         _.each(manche, (round, rindex) => {
             cars = storage.loadRound(mindex, rindex);
+            console.log(`overrideTimes: m${mindex} r${rindex} cars=`, cars ? cars.length : 'undefined');
             if (cars) {
                 _.each(round, (_playerId, pindex) => {
                     time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
+                    console.log(`overrideTimes: m${mindex} r${rindex} p${pindex} input='${time}'`);
                     if (time) {
                         newTime = utils.safeTime(time);
                         oldTime = cars[pindex].currTime;
+                        console.log(`overrideTimes: m${mindex} r${rindex} p${pindex} old=${oldTime} new=${newTime}`);
                         if (newTime !== oldTime) {
                             cars[pindex].originalTime = oldTime;
                             cars[pindex].currTime = newTime;
