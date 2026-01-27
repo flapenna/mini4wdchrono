@@ -6,6 +6,7 @@ const utils = require('./utils');
 const storage = require('./storage');
 const chrono = require('./chrono');
 const xls = require('./export');
+const api = require('./api');
 const i18n = new (require('../i18n/i18n'));
 const clone = require('clone');
 
@@ -95,6 +96,7 @@ const disqualify = (mindex, rindex, pindex) => {
     cars[pindex].originalTime = cars[pindex].currTime;
     cars[pindex].currTime = 99999;
     storage.saveRound(mindex, rindex, cars);
+    api.submitMancheResults(mindex);
 
     ui.initRace(freeRound);
     updateRace();
@@ -124,6 +126,7 @@ const overrideTimes = () => {
             storage.saveRound(mindex, rindex, cars);
         });
     });
+    api.submitAllMancheResults();
 
     ui.showPlayerList();
     ui.showMancheList();
@@ -488,6 +491,7 @@ const raceFinished = () => {
 
     if (currTournament && !freeRound) {
         storage.saveRound(currManche, currRound, cars);
+        api.submitMancheResults(currManche);
 
         ui.showPlayerList();
         ui.showMancheList();
