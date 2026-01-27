@@ -1,9 +1,18 @@
 'use strict';
 
 const storage = require('./storage');
-const clone = require('clone');
 
 const BASE_URL = 'https://mini4wd-companion.com';
+
+// Build manches list without calling storage.getManches(),
+// which mutates tournament.manches in-place by pushing finals.
+const getSafeManches = (tournament) => {
+    const manches = [].concat(tournament.manches);
+    if (tournament.finals) {
+        manches.push(...tournament.finals);
+    }
+    return manches;
+};
 
 const submitMancheResults = (mancheIndex) => {
     console.log(`API: submitMancheResults called for mancheIndex=${mancheIndex}`);
@@ -15,11 +24,10 @@ const submitMancheResults = (mancheIndex) => {
     }
 
     const players = tournament.players;
-    // clone to avoid mutating tournament.manches (getManches pushes finals in-place)
-    const mancheList = clone(storage.getManches());
-    console.log(`API: mancheList length=${mancheList ? mancheList.length : null}`);
+    const mancheList = getSafeManches(tournament);
+    console.log(`API: mancheList length=${mancheList.length}`);
 
-    if (!mancheList || !mancheList[mancheIndex]) {
+    if (!mancheList[mancheIndex]) {
         console.log(`API: no manche at index ${mancheIndex}, skipping`);
         return;
     }
@@ -80,17 +88,16 @@ const submitMancheResults = (mancheIndex) => {
 const submitAllMancheResults = () => {
     console.log('API: submitAllMancheResults called');
 
-    // clone to avoid mutating tournament.manches (getManches pushes finals in-place)
-    const mancheList = clone(storage.getManches());
-    if (!mancheList) {
-        console.log('API: no mancheList, skipping');
+    const tournament = storage.get('tournament');
+    if (!tournament || !tournament.code) {
+        console.log('API: no tournament, skipping');
         return;
     }
 
+    const mancheList = getSafeManches(tournament);
     console.log(`API: checking ${mancheList.length} manches for completed rounds`);
 
-    mancheList.forEach((_manche, mancheIndex) => {
-        const manche = mancheList[mancheIndex];
+    mancheList.forEach((manche, mancheIndex) => {
         const hasCompletedRound = manche.some((_round, roundIndex) => {
             return !!storage.loadRound(mancheIndex, roundIndex);
         });
