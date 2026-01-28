@@ -30,8 +30,13 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
     const players = tournament.players;
     const mancheList = getSafeManches(tournament);
 
+    // Log the round configuration for debugging
+    const round = mancheList[mancheIndex] ? mancheList[mancheIndex][roundIndex] : null;
+    console.log(`API: round config=`, JSON.stringify(round));
+    console.log(`API: players array=`, JSON.stringify(players));
+
     const cars = storage.loadRound(mancheIndex, roundIndex);
-    console.log(`API: cars=`, cars ? cars.length : 'undefined');
+    console.log(`API: cars=`, cars ? JSON.stringify(cars.map(c => ({ playerId: c.playerId, currTime: c.currTime }))) : 'undefined');
     if (!cars) {
         console.log(`API: no cars data for manche ${mancheIndex}, round ${roundIndex}, skipping`);
         return;
@@ -39,8 +44,8 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
 
     const results = [];
     cars.forEach((car, carIndex) => {
-        if (car.playerId === -1) {
-            console.log(`API:   car[${carIndex}] empty lane, skipping`);
+        if (car.playerId === -1 || car.playerId === null || car.playerId === undefined) {
+            console.log(`API:   car[${carIndex}] empty lane (playerId=${car.playerId}), skipping`);
             return;
         }
 

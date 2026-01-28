@@ -92,21 +92,25 @@ const buildEmptyCars = (mindex, rindex) => {
     // Use storage.getManches() to ensure consistency with UI display
     const manches = storage.getManches();
     const round = manches[mindex][rindex];
-    return round.map((playerId) => ({
-        playerId: playerId,
-        startLane: 0,
-        nextLane: 0,
-        lapCount: 0,
-        startTimestamp: 0,
-        currTimestamp: 0,
-        endTimestamp: 0,
-        currTime: 0,
-        splitTimes: [],
-        position: 0,
-        delayFromFirst: 0,
-        speed: 0,
-        outOfBounds: false
-    }));
+    console.log(`buildEmptyCars: manche=${mindex}, round=${rindex}, playerIds=${JSON.stringify(round)}`);
+    return round.map((playerId, idx) => {
+        console.log(`buildEmptyCars: creating car[${idx}] with playerId=${playerId}`);
+        return {
+            playerId: playerId,
+            startLane: 0,
+            nextLane: 0,
+            lapCount: 0,
+            startTimestamp: 0,
+            currTimestamp: 0,
+            endTimestamp: 0,
+            currTime: 0,
+            splitTimes: [],
+            position: 0,
+            delayFromFirst: 0,
+            speed: 0,
+            outOfBounds: false
+        };
+    });
 };
 
 const disqualify = (mindex, rindex, pindex) => {
@@ -133,15 +137,21 @@ const overrideTimes = () => {
 
     // Use storage.getManches() to ensure consistency with UI display
     const manches = storage.getManches();
+    const tournament = storage.get('tournament');
+    console.log('overrideTimes: players=', JSON.stringify(tournament.players));
+
     let time, newTime, oldTime, cars;
     _.each(manches, (manche, mindex) => {
         _.each(manche, (round, rindex) => {
+            console.log(`overrideTimes: processing manche=${mindex}, round=${rindex}, roundConfig=${JSON.stringify(round)}`);
             cars = storage.loadRound(mindex, rindex);
             if (!cars) {
                 cars = buildEmptyCars(mindex, rindex);
             }
+            console.log(`overrideTimes: cars playerIds=${JSON.stringify(cars.map(c => c.playerId))}`);
             _.each(round, (_playerId, pindex) => {
                 time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
+                console.log(`overrideTimes: pindex=${pindex}, playerId=${_playerId}, inputTime=${time}`);
                 if (time) {
                     newTime = utils.safeTime(time);
                     oldTime = cars[pindex].currTime;
