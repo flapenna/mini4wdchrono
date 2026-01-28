@@ -64,13 +64,9 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
         return;
     }
 
-    // Calculate the sequential manche_number for the API
-    // Each row/heat gets a unique sequential number (1, 2, 3, 4...)
-    let mancheNumber = 0;
-    for (let i = 0; i < mancheIndex; i++) {
-        mancheNumber += mancheList[i].length;
-    }
-    mancheNumber += roundIndex + 1;
+    // Use the manche number (1-based) as displayed in the UI
+    // mancheIndex 0 = MANCHE 1, mancheIndex 1 = MANCHE 2, etc.
+    const mancheNumber = mancheIndex + 1;
 
     const url = `${BASE_URL}/api/v1/public/tournament/${tournament.code}/heats`;
     const body = {
@@ -82,11 +78,11 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
     const cacheKey = `m${mancheIndex}r${roundIndex}`;
     const payloadJson = JSON.stringify(body);
     if (lastSubmitted[cacheKey] === payloadJson) {
-        console.log(`API: manche_number ${mancheNumber} (manche ${mancheIndex}, round ${roundIndex}) unchanged, skipping`);
+        console.log(`API: MANCHE ${mancheNumber} round ${roundIndex + 1} unchanged, skipping`);
         return;
     }
 
-    console.log(`API: POSTing manche_number ${mancheNumber} (manche ${mancheIndex}, round ${roundIndex}) to ${url}`, JSON.stringify(body, null, 2));
+    console.log(`API: POSTing MANCHE ${mancheNumber} round ${roundIndex + 1} to ${url}`, JSON.stringify(body, null, 2));
 
     $.ajax({
         url: url,
@@ -95,10 +91,10 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
         data: payloadJson,
         success: (response) => {
             lastSubmitted[cacheKey] = payloadJson;
-            console.log(`API: manche_number ${mancheNumber} results submitted`, response);
+            console.log(`API: MANCHE ${mancheNumber} round ${roundIndex + 1} submitted`, response);
         },
         error: (xhr, status, error) => {
-            console.error(`API: failed to submit manche_number ${mancheNumber}`, status, error);
+            console.error(`API: failed to submit MANCHE ${mancheNumber} round ${roundIndex + 1}`, status, error);
         }
     });
 };
