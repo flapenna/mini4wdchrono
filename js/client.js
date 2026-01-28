@@ -119,7 +119,7 @@ const disqualify = (mindex, rindex, pindex) => {
     cars[pindex].originalTime = cars[pindex].currTime;
     cars[pindex].currTime = 99999;
     storage.saveRound(mindex, rindex, cars);
-    api.submitMancheResults(mindex);
+    api.submitRoundResult(mindex, rindex);
 
     ui.initRace(freeRound);
     updateRace();
@@ -150,7 +150,7 @@ const overrideTimes = () => {
             storage.saveRound(mindex, rindex, cars);
         });
     });
-    api.submitAllMancheResults();
+    api.submitAllCompletedRounds();
 
     ui.showPlayerList();
     ui.showMancheList();
@@ -515,7 +515,7 @@ const raceFinished = () => {
 
     if (currTournament && !freeRound) {
         storage.saveRound(currManche, currRound, cars);
-        api.submitMancheResults(currManche);
+        api.submitRoundResult(currManche, currRound);
 
         ui.showPlayerList();
         ui.showMancheList();
