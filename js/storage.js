@@ -118,7 +118,8 @@ const getManches = () => {
     const tournament = get('tournament');
     if (!tournament) return null;
 
-    const mancheList = tournament.manches;
+    // Create a new array to avoid mutating tournament.manches
+    const mancheList = [].concat(tournament.manches);
     if (tournament.finals) {
         mancheList.push(...tournament.finals);
     }

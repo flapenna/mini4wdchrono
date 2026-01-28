@@ -89,7 +89,9 @@ const chronoInit = (reset) => {
 
 // Creates default car objects for a round that was never raced
 const buildEmptyCars = (mindex, rindex) => {
-    const round = mancheList[mindex][rindex];
+    // Use storage.getManches() to ensure consistency with UI display
+    const manches = storage.getManches();
+    const round = manches[mindex][rindex];
     return round.map((playerId) => ({
         playerId: playerId,
         startLane: 0,
@@ -129,8 +131,10 @@ const disqualify = (mindex, rindex, pindex) => {
 const overrideTimes = () => {
     console.log('client.overrideTimes called');
 
+    // Use storage.getManches() to ensure consistency with UI display
+    const manches = storage.getManches();
     let time, newTime, oldTime, cars;
-    _.each(mancheList, (manche, mindex) => {
+    _.each(manches, (manche, mindex) => {
         _.each(manche, (round, rindex) => {
             cars = storage.loadRound(mindex, rindex);
             if (!cars) {
