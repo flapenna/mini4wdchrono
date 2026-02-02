@@ -42,7 +42,7 @@ const init = (track, playerIds, cars) => {
         rTimeCutoffMax = rTrackLength / 3 / rSpeedThreshold * (1 + rTimeThreshold) * 1000;
     }
 
-    if (cars === null) {
+    if (cars == null) { // eslint-disable-line eqeqeq -- intentionally catches both null and undefined
     // init car 1
         rCar0 = clone(carObj);
         rCar0.startLane = rCar0.nextLane = 0;
@@ -91,7 +91,7 @@ const addLap = (lane) => {
     });
 
     // false sensor read
-    if (rTempCar === null) {
+    if (rTempCar == null) { // eslint-disable-line eqeqeq -- _.find returns undefined, not null
         console.log(`error: no valid car for signal on lane ${lane}`);
         return;
     }

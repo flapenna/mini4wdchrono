@@ -1,7 +1,12 @@
 'use strict';
 
 ////////////////////////
-const debugMode = false;
+const { app: mainApp } = require('electron').remote;
+const debugMode = mainApp.commandLine.hasSwitch('debug');
+console.log('Debug mode:', debugMode);
+if (debugMode) {
+    document.title = 'Mini4wdChrono [DEBUG MODE]';
+}
 ////////////////////////
 
 window.$ = require('jquery');

@@ -28,6 +28,7 @@
   "scripts": {
     "postinstall": "node ./scripts/postinstall.js",
     "start": "electron .",
+    "start:debug": "electron . --debug",
     "watch": "electron . --watch",
     "lint": "eslint --max-warnings=0 .",
     "lint:warn": "eslint .",

@@ -45,7 +45,7 @@ const loadRace = (filename) => {
         const filepath = path.join(userdir, 'races', filename);
         configuration.set('raceFile', filename);
         storage.setPath(filepath);
-        if (get('created') === null) {
+        if (get('created') == null) { // eslint-disable-line eqeqeq -- electron-settings returns undefined for missing keys
             setDefaults();
         }
     }
@@ -102,9 +102,9 @@ const saveRound = (manche, round, cars) => {
 };
 
 const loadRound = (manche, round) => {
-    if (manche === null)
+    if (manche == null) // eslint-disable-line eqeqeq -- intentionally catches both null and undefined
         manche = get('currManche');
-    if (round === null)
+    if (round == null) // eslint-disable-line eqeqeq -- intentionally catches both null and undefined
         round = get('currRound');
 
     return get(`race.m${manche}.r${round}`);
@@ -118,7 +118,8 @@ const getManches = () => {
     const tournament = get('tournament');
     if (!tournament) return null;
 
-    const mancheList = tournament.manches;
+    // Create a new array to avoid mutating tournament.manches
+    const mancheList = [].concat(tournament.manches);
     if (tournament.finals) {
         mancheList.push(...tournament.finals);
     }

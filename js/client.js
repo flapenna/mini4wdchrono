@@ -6,6 +6,7 @@ const utils = require('./utils');
 const storage = require('./storage');
 const chrono = require('./chrono');
 const xls = require('./export');
+const api = require('./api');
 const i18n = new (require('../i18n/i18n'));
 const clone = require('clone');
 
@@ -86,15 +87,45 @@ const chronoInit = (reset) => {
 // ==========================================================================
 // ==== time list handling
 
+// Creates default car objects for a round that was never raced
+const buildEmptyCars = (mindex, rindex) => {
+    // Use storage.getManches() to ensure consistency with UI display
+    const manches = storage.getManches();
+    const round = manches[mindex][rindex];
+    console.log(`buildEmptyCars: manche=${mindex}, round=${rindex}, playerIds=${JSON.stringify(round)}`);
+    return round.map((playerId, idx) => {
+        console.log(`buildEmptyCars: creating car[${idx}] with playerId=${playerId}`);
+        return {
+            playerId: playerId,
+            startLane: 0,
+            nextLane: 0,
+            lapCount: 0,
+            startTimestamp: 0,
+            currTimestamp: 0,
+            endTimestamp: 0,
+            currTime: 0,
+            splitTimes: [],
+            position: 0,
+            delayFromFirst: 0,
+            speed: 0,
+            outOfBounds: false
+        };
+    });
+};
+
 const disqualify = (mindex, rindex, pindex) => {
     console.log('client.disqualify called');
 
     mindex = mindex || currManche;
     rindex = rindex || currRound;
-    const cars = storage.loadRound(mindex, rindex);
+    let cars = storage.loadRound(mindex, rindex);
+    if (!cars) {
+        cars = buildEmptyCars(mindex, rindex);
+    }
     cars[pindex].originalTime = cars[pindex].currTime;
     cars[pindex].currTime = 99999;
     storage.saveRound(mindex, rindex, cars);
+    api.submitRoundResult(mindex, rindex);
 
     ui.initRace(freeRound);
     updateRace();
@@ -104,26 +135,36 @@ const disqualify = (mindex, rindex, pindex) => {
 const overrideTimes = () => {
     console.log('client.overrideTimes called');
 
+    // Use storage.getManches() to ensure consistency with UI display
+    const manches = storage.getManches();
+    const tournament = storage.get('tournament');
+    console.log('overrideTimes: players=', JSON.stringify(tournament.players));
+
     let time, newTime, oldTime, cars;
-    _.each(mancheList, (manche, mindex) => {
+    _.each(manches, (manche, mindex) => {
         _.each(manche, (round, rindex) => {
+            console.log(`overrideTimes: processing manche=${mindex}, round=${rindex}, roundConfig=${JSON.stringify(round)}`);
             cars = storage.loadRound(mindex, rindex);
-            if (cars) {
-                _.each(round, (_playerId, pindex) => {
-                    time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
-                    if (time) {
-                        newTime = utils.safeTime(time);
-                        oldTime = cars[pindex].currTime;
-                        if (newTime !== oldTime) {
-                            cars[pindex].originalTime = oldTime;
-                            cars[pindex].currTime = newTime;
-                        }
-                    }
-                });
+            if (!cars) {
+                cars = buildEmptyCars(mindex, rindex);
             }
+            console.log(`overrideTimes: cars playerIds=${JSON.stringify(cars.map(c => c.playerId))}`);
+            _.each(round, (_playerId, pindex) => {
+                time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
+                console.log(`overrideTimes: pindex=${pindex}, playerId=${_playerId}, inputTime=${time}`);
+                if (time) {
+                    newTime = utils.safeTime(time);
+                    oldTime = cars[pindex].currTime;
+                    if (newTime !== oldTime) {
+                        cars[pindex].originalTime = oldTime;
+                        cars[pindex].currTime = newTime;
+                    }
+                }
+            });
             storage.saveRound(mindex, rindex, cars);
         });
     });
+    api.submitAllCompletedRounds();
 
     ui.showPlayerList();
     ui.showMancheList();
@@ -488,6 +529,7 @@ const raceFinished = () => {
 
     if (currTournament && !freeRound) {
         storage.saveRound(currManche, currRound, cars);
+        api.submitRoundResult(currManche, currRound);
 
         ui.showPlayerList();
         ui.showMancheList();
@@ -538,7 +580,7 @@ const updateRace = () => {
 };
 
 const startTimer = (lane) => {
-    if (timerIntervals[lane] === null) {
+    if (timerIntervals[lane] == null) { // eslint-disable-line eqeqeq -- intentionally catches both null and undefined
         timerSeconds[lane] = 0;
         timerIntervals[lane] = setInterval(timer, 100, lane);
     }
