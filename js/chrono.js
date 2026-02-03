@@ -155,9 +155,14 @@ const calculateRace = () => {
     });
 };
 
-// find next lane following the right order (1-2-3 or 1-3-2)
+// find next lane following the right order (1-2-3, 1-3-2, or 1-1-1 for same lane mode)
 const nextLane = (lane) => {
-    return rLaneOrder[(rLaneOrder.indexOf(lane) + 1) % rLaneOrder.length];
+    const idx = rLaneOrder.indexOf(lane);
+    if (idx === -1) {
+        // lane not in order array, stay in same lane (1-1-1-1 mode)
+        return lane;
+    }
+    return rLaneOrder[(idx + 1) % rLaneOrder.length];
 };
 
 // check if round is finished (all cars out or did 3 laps)
