@@ -158,6 +158,8 @@ const overrideTimes = () => {
                     if (newTime !== oldTime) {
                         cars[pindex].originalTime = oldTime;
                         cars[pindex].currTime = newTime;
+                        // Update outOfBounds flag based on the new time value
+                        cars[pindex].outOfBounds = (newTime === 99999);
                     }
                 }
             });
