@@ -124,6 +124,7 @@ const disqualify = (mindex, rindex, pindex) => {
     }
     cars[pindex].originalTime = cars[pindex].currTime;
     cars[pindex].currTime = 99999;
+    cars[pindex].outOfBounds = true;
     storage.saveRound(mindex, rindex, cars);
     api.submitRoundResult(mindex, rindex);
 
@@ -158,9 +159,10 @@ const overrideTimes = () => {
                     if (newTime !== oldTime) {
                         cars[pindex].originalTime = oldTime;
                         cars[pindex].currTime = newTime;
-                        // Update outOfBounds flag based on the new time value
-                        cars[pindex].outOfBounds = (newTime === 99999);
                     }
+                    // Always sync outOfBounds with current time value,
+                    // even if time didn't change (fixes stale outOfBounds flag)
+                    cars[pindex].outOfBounds = (cars[pindex].currTime === 99999);
                 }
             });
             storage.saveRound(mindex, rindex, cars);
