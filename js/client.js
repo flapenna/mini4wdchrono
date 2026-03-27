@@ -156,6 +156,7 @@ const overrideTimes = () => {
                 if (time) {
                     newTime = utils.safeTime(time);
                     oldTime = cars[pindex].currTime;
+                    console.log(`overrideTimes: pindex=${pindex}, safeTime=${newTime}, oldTime=${oldTime}, oldOutOfBounds=${cars[pindex].outOfBounds}`);
                     if (newTime !== oldTime) {
                         cars[pindex].originalTime = oldTime;
                         cars[pindex].currTime = newTime;
@@ -163,6 +164,7 @@ const overrideTimes = () => {
                     // Always sync outOfBounds with current time value,
                     // even if time didn't change (fixes stale outOfBounds flag)
                     cars[pindex].outOfBounds = (cars[pindex].currTime === 99999);
+                    console.log(`overrideTimes: pindex=${pindex}, newCurrTime=${cars[pindex].currTime}, newOutOfBounds=${cars[pindex].outOfBounds}`);
                 }
             });
             storage.saveRound(mindex, rindex, cars);
