@@ -49,6 +49,7 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
             return;
         }
 
+        console.log(`API:   car[${carIndex}] outOfBounds=${car.outOfBounds} currTime=${car.currTime}`);
         const isDnf = car.outOfBounds === true || car.currTime === 99999;
         const entry = {
             car_name: players[car.playerId],
