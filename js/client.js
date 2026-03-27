@@ -168,6 +168,9 @@ const overrideTimes = () => {
                 }
             });
             storage.saveRound(mindex, rindex, cars);
+            // Verify save/load roundtrip
+            const verify = storage.loadRound(mindex, rindex);
+            console.log(`overrideTimes: VERIFY after save m=${mindex} r=${rindex}`, JSON.stringify(verify.map(c => ({ currTime: c.currTime, outOfBounds: c.outOfBounds }))));
         });
     });
     api.submitAllCompletedRounds();
