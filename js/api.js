@@ -1,6 +1,7 @@
 'use strict';
 
 const storage = require('./storage');
+const auth = require('./auth');
 
 const BASE_URL = 'https://mini4wd-companion.com';
 
@@ -85,11 +86,19 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
 
     console.log(`API: POSTing MANCHE ${mancheNumber} round ${roundIndex + 1} to ${url}`, JSON.stringify(body, null, 2));
 
-    $.ajax({
+    const ajaxOptions = {
         url: url,
         type: 'POST',
         contentType: 'application/json',
-        data: payloadJson,
+        data: payloadJson
+    };
+
+    const token = auth.getToken();
+    if (token) {
+        ajaxOptions.headers = { 'Authorization': 'Bearer ' + token };
+    }
+
+    $.ajax(Object.assign(ajaxOptions, {
         success: (response) => {
             lastSubmitted[cacheKey] = payloadJson;
             console.log(`API: MANCHE ${mancheNumber} round ${roundIndex + 1} submitted`, response);
@@ -97,7 +106,7 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
         error: (xhr, status, error) => {
             console.error(`API: failed to submit MANCHE ${mancheNumber} round ${roundIndex + 1}`, status, error);
         }
-    });
+    }));
 };
 
 // Submit all completed rounds to the API (used when saving from tabella manche)

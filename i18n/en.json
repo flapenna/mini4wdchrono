@@ -128,5 +128,13 @@
 	"dialog-replay-round": "Play this round again? The current data will be lost.",
 	"dialog-saved": "Changes saved correctly.",
 	"label-check-updates": "Check for updates",
-	"option-lane-order": "Select lane order"
+	"option-lane-order": "Select lane order",
+	"button-login": "Login",
+	"button-logout": "Logout",
+	"label-companion-load": "Or load from Mini4WD Companion",
+	"label-select-race": "Select race",
+	"label-select-category": "Select category",
+	"label-no-races": "No races available for today",
+	"label-no-tournament-code": "Tournament not imported",
+	"dialog-login-error": "Login failed. Check your credentials."
 }

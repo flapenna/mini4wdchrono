@@ -604,6 +604,61 @@ const updateUiState = (freeRound) => {
     }
 };
 
+// Companion login state UI
+
+const showLoggedIn = (user) => {
+    const displayName = user.display_name || user.first_name || user.name || user.email;
+    $('#js-companion-login-form').hide();
+    $('#js-companion-user-info').show();
+    $('#js-companion-user-name').text(displayName);
+    $('#js-companion-race-section').show();
+};
+
+const showLoggedOut = () => {
+    $('#js-companion-login-form').show();
+    $('#js-companion-user-info').hide();
+    $('#js-companion-user-name').text('');
+    $('#js-companion-race-section').hide();
+    $('#js-companion-race-select').empty();
+    $('#js-companion-category-select').empty();
+};
+
+const populateRaceSelect = (races) => {
+    const $select = $('#js-companion-race-select');
+    $select.empty();
+    $select.append($('<option>', { value: '', text: '-- ' + i18n.__('label-select-race') + ' --' }));
+    if (!races || races.length === 0) {
+        $select.append($('<option>', { value: '', text: i18n.__('label-no-races'), disabled: true }));
+        return;
+    }
+    races.forEach(function (race) {
+        $select.append($('<option>', {
+            value: race.id,
+            text: race.name + ' (' + race.participant_count + ' ' + i18n.__('label-tournament-players').toLowerCase() + ')'
+        }));
+    });
+    // Clear category select
+    $('#js-companion-category-select').empty();
+};
+
+const populateCategorySelect = (categories) => {
+    const $select = $('#js-companion-category-select');
+    $select.empty();
+    $select.append($('<option>', { value: '', text: '-- ' + i18n.__('label-select-category') + ' --' }));
+    if (!categories || categories.length === 0) {
+        return;
+    }
+    categories.forEach(function (cat) {
+        const catName = cat.category ? cat.category.name : 'Category';
+        const hasCode = cat.external_tournament_code ? '' : ' (' + i18n.__('label-no-tournament-code') + ')';
+        $select.append($('<option>', {
+            value: cat.external_tournament_code || '',
+            text: catName + hasCode,
+            disabled: !cat.external_tournament_code
+        }));
+    });
+};
+
 module.exports = {
     boardConnected: boardConnected,
     boardDisonnected: boardDisonnected,
@@ -626,5 +681,9 @@ module.exports = {
     showMancheList: showMancheList,
     showNextRoundNames: showNextRoundNames,
     initRace: initRace,
-    drawRace: drawRace
+    drawRace: drawRace,
+    showLoggedIn: showLoggedIn,
+    showLoggedOut: showLoggedOut,
+    populateRaceSelect: populateRaceSelect,
+    populateCategorySelect: populateCategorySelect
 };

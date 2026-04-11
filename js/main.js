@@ -38,9 +38,21 @@ const storage = require('./js/storage');
 const client = require('./js/client');
 const ui = require('./js/ui');
 const xls = require('./js/export');
+const auth = require('./js/auth');
+const companion = require('./js/companion');
 
 // load race from file
 storage.loadRace();
+
+// Initialize companion auth and restore login state
+auth.init();
+if (auth.isLoggedIn()) {
+    ui.showLoggedIn(auth.getUser());
+    companion.fetchTodayRaces(function (races) {
+        window._companionRaces = races;
+        ui.populateRaceSelect(races);
+    });
+}
 
 // Show version in about tab
 $('#js-about-version').text(`Version ${app.getVersion()}`);
@@ -331,6 +343,62 @@ $('#js-load-tournament').on('click', (e) => {
     const $this = $(e.currentTarget);
     if ($this.attr('disabled')) return;
     const code = $('#js-input-tournament-code').val().slice(-6);
+    client.loadTournament(code);
+});
+
+// Companion login
+$('#js-companion-login').on('click', () => {
+    const email = $('#js-companion-email').val().trim();
+    const password = $('#js-companion-password').val();
+    if (!email || !password) return;
+
+    auth.login(email, password,
+        function (user) {
+            ui.showLoggedIn(user);
+            $('#js-companion-email').val('');
+            $('#js-companion-password').val('');
+            companion.fetchTodayRaces(function (races) {
+                window._companionRaces = races;
+                ui.populateRaceSelect(races);
+            });
+        },
+        function () {
+            dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', message: i18n.__('dialog-login-error'), buttons: ['Ok'] });
+        }
+    );
+});
+
+// Allow login on Enter key in password field
+$('#js-companion-password').on('keypress', (e) => {
+    if (e.which === 13) {
+        $('#js-companion-login').trigger('click');
+    }
+});
+
+// Companion logout
+$('#js-companion-logout').on('click', () => {
+    auth.logout();
+    ui.showLoggedOut();
+    window._companionRaces = null;
+});
+
+// Companion race select change — populate categories
+$('#js-companion-race-select').on('change', () => {
+    const raceId = $('#js-companion-race-select').val();
+    if (!raceId || !window._companionRaces) {
+        ui.populateCategorySelect([]);
+        return;
+    }
+    const race = window._companionRaces.find(function (r) { return r.id === raceId; });
+    if (race && race.categories) {
+        ui.populateCategorySelect(race.categories);
+    }
+});
+
+// Companion load tournament from selected category
+$('#js-companion-load-tournament').on('click', () => {
+    const code = $('#js-companion-category-select').val();
+    if (!code) return;
     client.loadTournament(code);
 });
 

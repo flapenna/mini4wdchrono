@@ -128,5 +128,13 @@
 	"dialog-replay-round": "Giocare di nuovo questo round? I dati attuali saranno persi.",
 	"dialog-saved": "Modifiche salvate correttamente.",
 	"label-check-updates": "Controlla aggiornamenti",
-	"option-lane-order": "Seleziona ordine corsie"
+	"option-lane-order": "Seleziona ordine corsie",
+	"button-login": "Accedi",
+	"button-logout": "Esci",
+	"label-companion-load": "Oppure carica da Mini4WD Companion",
+	"label-select-race": "Seleziona gara",
+	"label-select-category": "Seleziona categoria",
+	"label-no-races": "Nessuna gara disponibile per oggi",
+	"label-no-tournament-code": "Torneo non importato",
+	"dialog-login-error": "Login fallito. Controlla le credenziali."
 }

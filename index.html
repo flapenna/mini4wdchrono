@@ -47,6 +47,29 @@
 							</div>
 						</div>
 					</div>
+					<div class="navbar-item">
+						<!-- Companion login form (shown when logged out) -->
+						<div id="js-companion-login-form" class="field is-grouped">
+							<div class="control">
+								<input id="js-companion-email" class="input is-small" type="email" placeholder="Email" style="width: 140px;">
+							</div>
+							<div class="control">
+								<input id="js-companion-password" class="input is-small" type="password" placeholder="Password" style="width: 120px;">
+							</div>
+							<div class="control">
+								<button id="js-companion-login" class="button is-small is-link tn" data-tn="button-login">Login</button>
+							</div>
+						</div>
+						<!-- Companion user info (shown when logged in) -->
+						<div id="js-companion-user-info" class="field is-grouped" style="display: none;">
+							<div class="control">
+								<span class="tag is-success is-medium"><span id="js-companion-user-name"></span></span>
+							</div>
+							<div class="control">
+								<button id="js-companion-logout" class="button is-small is-light tn" data-tn="button-logout">Logout</button>
+							</div>
+						</div>
+					</div>
 				</div>
 			</div>
 		</nav>
@@ -193,6 +216,31 @@
 						<a id="js-link-tournament" href="#" class="button tn" data-tn="button-open-tournament-editor">
 							See in Mini4WD Tournament Generator &gt;
 						</a>
+					</div>
+				</div>
+
+				<!-- Companion race picker (shown when logged in) -->
+				<div id="js-companion-race-section" style="display: none;">
+					<hr>
+					<label class="label tn" data-tn="label-companion-load">Or load from Mini4WD Companion</label>
+					<div class="field">
+						<div class="control">
+							<div class="select is-fullwidth">
+								<select id="js-companion-race-select"></select>
+							</div>
+						</div>
+					</div>
+					<div class="field has-addons">
+						<div class="control is-expanded">
+							<div class="select is-fullwidth">
+								<select id="js-companion-category-select"></select>
+							</div>
+						</div>
+						<div class="control">
+							<button id="js-companion-load-tournament" class="button is-info tn" data-tn="button-load">
+								Load
+							</button>
+						</div>
 					</div>
 				</div>
 			</div>
