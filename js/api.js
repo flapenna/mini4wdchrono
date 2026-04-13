@@ -76,6 +76,23 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
         results: results
     };
 
+    // Detect if this is a finals manche and add finals-specific fields
+    const qualifierCount = tournament.mancheCount || tournament.manches.length;
+    if (mancheIndex >= qualifierCount && tournament.finals) {
+        body.round_type = 'final';
+        const finalsIndex = mancheIndex - qualifierCount;
+        if (tournament.finals.length >= 2) {
+            // Two brackets: first is finalina, last is final
+            body.finals_bracket = (finalsIndex === 0) ? 'finalina' : 'final';
+        } else {
+            // Only one bracket: it's the final
+            body.finals_bracket = 'final';
+        }
+        // roundIndex (0-2) is the Latin Square rotation within the bracket
+        body.finals_round_number = roundIndex + 1;
+        console.log(`API: Finals detected - bracket=${body.finals_bracket} round=${body.finals_round_number}`);
+    }
+
     // Use a unique key combining manche and round for deduplication
     const cacheKey = `m${mancheIndex}r${roundIndex}`;
     const payloadJson = JSON.stringify(body);
