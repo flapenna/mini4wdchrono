@@ -2,8 +2,10 @@
 
 const storage = require('./storage');
 const auth = require('./auth');
+const { app } = require('electron').remote;
 
 const BASE_URL = 'https://mini4wd-companion.com';
+const APP_VERSION = app.getVersion();
 
 // Track last submitted payload per heat to avoid redundant API calls
 const lastSubmitted = {};
@@ -110,9 +112,10 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
         data: payloadJson
     };
 
+    ajaxOptions.headers = { 'X-Chrono-Version': APP_VERSION };
     const token = auth.getToken();
     if (token) {
-        ajaxOptions.headers = { 'Authorization': 'Bearer ' + token };
+        ajaxOptions.headers['Authorization'] = 'Bearer ' + token;
     }
 
     $.ajax(Object.assign(ajaxOptions, {
@@ -150,7 +153,33 @@ const submitAllCompletedRounds = () => {
     });
 };
 
+// Check if this chrono version is up to date
+const checkVersion = (callback) => {
+    const url = `${BASE_URL}/api/v1/public/chrono/version-check?version=${APP_VERSION}`;
+
+    $.ajax({
+        url: url,
+        type: 'GET',
+        contentType: 'application/json',
+        headers: { 'X-Chrono-Version': APP_VERSION },
+        success: (response) => {
+            const data = response.data || response;
+            console.log('API: version check result:', data.status);
+            if (callback) {
+                callback(data);
+            }
+        },
+        error: (xhr, status, error) => {
+            console.error('API: version check failed', status, error);
+            if (callback) {
+                callback(null);
+            }
+        }
+    });
+};
+
 module.exports = {
     submitRoundResult: submitRoundResult,
-    submitAllCompletedRounds: submitAllCompletedRounds
+    submitAllCompletedRounds: submitAllCompletedRounds,
+    checkVersion: checkVersion
 };

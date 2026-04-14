@@ -74,6 +74,21 @@
 			</div>
 		</nav>
 
+		<!-- VERSION WARNING BANNER -->
+		<div id="js-version-banner" class="notification is-warning" style="display: none; margin: 0 1rem;">
+			<button class="delete" onclick="document.getElementById('js-version-banner').style.display='none'"></button>
+			<strong id="js-version-banner-title">Update available</strong>
+			<span id="js-version-banner-message"></span>
+			<a id="js-version-banner-link" href="#" target="_blank" class="button is-small is-warning is-inverted" style="margin-left: 8px;">Download</a>
+		</div>
+
+		<!-- VERSION BLOCKED BANNER -->
+		<div id="js-version-blocked-banner" class="notification is-danger" style="display: none; margin: 0 1rem;">
+			<strong id="js-version-blocked-title">Update required</strong>
+			<span id="js-version-blocked-message"></span>
+			<a id="js-version-blocked-link" href="#" target="_blank" class="button is-small is-danger is-inverted" style="margin-left: 8px;">Download</a>
+		</div>
+
 		<!-- TABS -->
 		<div class="tabs is-centered is-boxed is-hidden-print">
 			<ul>

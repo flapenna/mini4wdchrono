@@ -40,9 +40,43 @@ const ui = require('./js/ui');
 const xls = require('./js/export');
 const auth = require('./js/auth');
 const companion = require('./js/companion');
+const api = require('./js/api');
 
 // load race from file
 storage.loadRace();
+
+// Check chrono version against companion server
+const runVersionCheck = function () {
+    api.checkVersion(function (data) {
+        if (!data) return;
+        if (data.status === 'blocked') {
+            $('#js-version-blocked-message').text(
+                ` ${i18n.__('version-blocked-detail').replace('{{version}}', data.min_version)}`
+            );
+            if (data.download_url) {
+                $('#js-version-blocked-link').attr('href', data.download_url).show();
+            } else {
+                $('#js-version-blocked-link').hide();
+            }
+            $('#js-version-blocked-banner').show();
+            $('#js-version-banner').hide();
+        } else if (data.status === 'update_available') {
+            $('#js-version-banner-message').text(
+                ` ${i18n.__('version-update-detail').replace('{{version}}', data.recommended_version)}`
+            );
+            if (data.download_url) {
+                $('#js-version-banner-link').attr('href', data.download_url).show();
+            } else {
+                $('#js-version-banner-link').hide();
+            }
+            $('#js-version-banner').show();
+            $('#js-version-blocked-banner').hide();
+        } else {
+            $('#js-version-banner').hide();
+            $('#js-version-blocked-banner').hide();
+        }
+    });
+};
 
 // Initialize companion auth and restore login state
 auth.init();
@@ -52,6 +86,7 @@ if (auth.isLoggedIn()) {
         window._companionRaces = races;
         ui.populateRaceSelect(races);
     });
+    runVersionCheck();
 }
 
 // Show version in about tab
@@ -361,6 +396,7 @@ $('#js-companion-login').on('click', () => {
                 window._companionRaces = races;
                 ui.populateRaceSelect(races);
             });
+            runVersionCheck();
         },
         function () {
             dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', message: i18n.__('dialog-login-error'), buttons: ['Ok'] });
@@ -380,6 +416,8 @@ $('#js-companion-logout').on('click', () => {
     auth.logout();
     ui.showLoggedOut();
     window._companionRaces = null;
+    $('#js-version-banner').hide();
+    $('#js-version-blocked-banner').hide();
 });
 
 // Companion race select change — populate categories

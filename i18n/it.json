@@ -136,5 +136,7 @@
 	"label-select-category": "Seleziona categoria",
 	"label-no-races": "Nessuna gara disponibile per oggi",
 	"label-no-tournament-code": "Torneo non importato",
-	"dialog-login-error": "Login fallito. Controlla le credenziali."
+	"dialog-login-error": "Login fallito. Controlla le credenziali.",
+	"version-blocked-detail": "Aggiorna alla versione {{version}} o successiva.",
+	"version-update-detail": "La versione {{version}} è disponibile. Aggiorna."
 }

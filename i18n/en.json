@@ -136,5 +136,7 @@
 	"label-select-category": "Select category",
 	"label-no-races": "No races available for today",
 	"label-no-tournament-code": "Tournament not imported",
-	"dialog-login-error": "Login failed. Check your credentials."
+	"dialog-login-error": "Login failed. Check your credentials.",
+	"version-blocked-detail": "Please update to version {{version}} or later.",
+	"version-update-detail": "Version {{version}} is available. Please update."
 }
