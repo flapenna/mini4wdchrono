@@ -1,14 +1,14 @@
 'use strict';
 
-const { BrowserWindow, session } = require('electron').remote;
+const { ipcRenderer } = require('electron');
+const { shell } = require('electron').remote;
 const configuration = require('./configuration');
 
 const BASE_URL = 'https://mini4wd-companion.com';
-const SESSION_PARTITION = 'persist:companion';
 
 let currentToken = null;
 let currentUser = null;
-let loginWindow = null;
+let pendingCallbacks = null;
 
 const init = () => {
     currentToken = configuration.get('companionToken') || null;
@@ -22,6 +22,24 @@ const init = () => {
             currentToken = null;
         }
     }
+
+    // Listen for auth callback from main process (custom protocol)
+    ipcRenderer.on('companion-auth-callback', function (event, token) {
+        if (!token) return;
+
+        fetchUserInfo(token, function (user) {
+            saveCredentials(token, user);
+            if (pendingCallbacks && pendingCallbacks.onSuccess) {
+                pendingCallbacks.onSuccess(user);
+            }
+            pendingCallbacks = null;
+        }, function (err) {
+            if (pendingCallbacks && pendingCallbacks.onError) {
+                pendingCallbacks.onError(err);
+            }
+            pendingCallbacks = null;
+        });
+    });
 };
 
 const saveCredentials = (token, user) => {
@@ -32,70 +50,11 @@ const saveCredentials = (token, user) => {
 };
 
 const loginWithBrowser = (onSuccess, onError) => {
-    // Prevent multiple login windows
-    if (loginWindow && !loginWindow.isDestroyed()) {
-        loginWindow.focus();
-        return;
-    }
+    // Store callbacks for when the custom protocol callback arrives
+    pendingCallbacks = { onSuccess: onSuccess, onError: onError };
 
-    const companionSession = session.fromPartition(SESSION_PARTITION);
-
-    loginWindow = new BrowserWindow({
-        width: 900,
-        height: 700,
-        webPreferences: {
-            partition: SESSION_PARTITION,
-            nodeIntegration: false
-        }
-    });
-
-    loginWindow.loadURL(BASE_URL + '/login');
-
-    const checkForAuth = (url) => {
-        // After login, companion redirects to /races or / (root)
-        if (url.indexOf(BASE_URL + '/races') === 0 || url === BASE_URL + '/' || url === BASE_URL) {
-            // Extract auth_token cookie from the companion session
-            companionSession.cookies.get({ url: BASE_URL, name: 'auth_token' })
-                .then(function (cookies) {
-                    if (!cookies || cookies.length === 0) {
-                        return;
-                    }
-                    const token = cookies[0].value;
-                    // Fetch user info with the token
-                    fetchUserInfo(token, function (user) {
-                        saveCredentials(token, user);
-                        if (loginWindow && !loginWindow.isDestroyed()) {
-                            loginWindow.close();
-                        }
-                        if (onSuccess) {
-                            onSuccess(user);
-                        }
-                    }, function (err) {
-                        if (loginWindow && !loginWindow.isDestroyed()) {
-                            loginWindow.close();
-                        }
-                        if (onError) {
-                            onError(err);
-                        }
-                    });
-                })
-                .catch(function (err) {
-                    console.error('Auth: failed to read cookies', err);
-                });
-        }
-    };
-
-    loginWindow.webContents.on('did-navigate', function (event, url) {
-        checkForAuth(url);
-    });
-
-    loginWindow.webContents.on('did-redirect-navigation', function (event, url) {
-        checkForAuth(url);
-    });
-
-    loginWindow.on('closed', function () {
-        loginWindow = null;
-    });
+    // Open system browser to companion auth page
+    shell.openExternal(BASE_URL + '/chrono-auth');
 };
 
 const fetchUserInfo = (token, onSuccess, onError) => {
@@ -146,10 +105,6 @@ const logout = () => {
     currentUser = null;
     configuration.del('companionToken');
     configuration.del('companionUser');
-    // Clear companion browser session so next login requires re-auth
-    const companionSession = session.fromPartition(SESSION_PARTITION);
-    companionSession.cookies.remove(BASE_URL, 'auth_token').catch(function () {});
-    companionSession.clearStorageData({ origin: BASE_URL }).catch(function () {});
 };
 
 const isLoggedIn = () => {
