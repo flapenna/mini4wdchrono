@@ -22,7 +22,9 @@ const fetchTodayRaces = (onSuccess, onError) => {
         },
         success: function (response) {
             if (onSuccess) {
-                onSuccess(response.races || []);
+                // Response format: { success: true, data: { races: [...] } }
+                const data = response.data || response;
+                onSuccess(data.races || []);
             }
         },
         error: function (xhr, status, error) {
