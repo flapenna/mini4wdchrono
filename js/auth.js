@@ -28,6 +28,16 @@ const init = () => {
         if (!token) return;
 
         fetchUserInfo(token, function (user) {
+            // Only organizers, admins, and superadmins can use the chrono app
+            const role = user.role || '';
+            if (role !== 'organizer' && role !== 'admin' && role !== 'superadmin') {
+                console.error('Auth: user role not authorized for chrono', role);
+                if (pendingCallbacks && pendingCallbacks.onError) {
+                    pendingCallbacks.onError('unauthorized');
+                }
+                pendingCallbacks = null;
+                return;
+            }
             saveCredentials(token, user);
             if (pendingCallbacks && pendingCallbacks.onSuccess) {
                 pendingCallbacks.onSuccess(user);
