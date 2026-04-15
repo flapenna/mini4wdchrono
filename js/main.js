@@ -94,6 +94,8 @@ if (auth.isLoggedIn()) {
         ui.showLoggedOut();
         window._companionRaces = null;
     });
+} else {
+    ui.showLoggedOut();
 }
 
 // Show version in about tab
