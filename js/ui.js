@@ -608,16 +608,16 @@ const updateUiState = (freeRound) => {
 
 const showLoggedIn = (user) => {
     const displayName = user.display_name || user.first_name || user.name || user.email;
-    $('#js-companion-login-form').hide();
-    $('#js-companion-user-info').show();
-    $('#js-companion-user-name').text(displayName);
+    $('#tag-companion-status').removeClass('is-danger');
+    $('#tag-companion-status').addClass('is-success');
+    $('#tag-companion-status').text(displayName);
     $('#js-companion-race-section').show();
 };
 
 const showLoggedOut = () => {
-    $('#js-companion-login-form').show();
-    $('#js-companion-user-info').hide();
-    $('#js-companion-user-name').text('');
+    $('#tag-companion-status').removeClass('is-success');
+    $('#tag-companion-status').addClass('is-danger');
+    $('#tag-companion-status').text(i18n.__('tag-not-connected'));
     $('#js-companion-race-section').hide();
     $('#js-companion-race-select').empty();
     $('#js-companion-category-select').empty();

@@ -129,6 +129,8 @@
 	"dialog-saved": "Changes saved correctly.",
 	"label-check-updates": "Check for updates",
 	"option-lane-order": "Select lane order",
+	"tag-companion": "Companion",
+	"tag-not-connected": "not connected",
 	"button-login": "Login",
 	"button-logout": "Logout",
 	"label-companion-load": "Or load from Mini4WD Companion",

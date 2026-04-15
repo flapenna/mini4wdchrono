@@ -87,6 +87,13 @@ if (auth.isLoggedIn()) {
         ui.populateRaceSelect(races);
     });
     runVersionCheck();
+    // Validate token in background
+    auth.validate(function (user) {
+        ui.showLoggedIn(user);
+    }, function () {
+        ui.showLoggedOut();
+        window._companionRaces = null;
+    });
 }
 
 // Show version in about tab
@@ -381,43 +388,31 @@ $('#js-load-tournament').on('click', (e) => {
     client.loadTournament(code);
 });
 
-// Companion login
-$('#js-companion-login').on('click', () => {
-    const email = $('#js-companion-email').val().trim();
-    const password = $('#js-companion-password').val();
-    if (!email || !password) return;
-
-    auth.login(email, password,
-        function (user) {
-            ui.showLoggedIn(user);
-            $('#js-companion-email').val('');
-            $('#js-companion-password').val('');
-            companion.fetchTodayRaces(function (races) {
-                window._companionRaces = races;
-                ui.populateRaceSelect(races);
-            });
-            runVersionCheck();
-        },
-        function () {
-            dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', message: i18n.__('dialog-login-error'), buttons: ['Ok'] });
-        }
-    );
-});
-
-// Allow login on Enter key in password field
-$('#js-companion-password').on('keypress', (e) => {
-    if (e.which === 13) {
-        $('#js-companion-login').trigger('click');
+// Companion tag click — login or logout
+$('#js-companion-tag').on('click', () => {
+    if (auth.isLoggedIn()) {
+        // Logout
+        auth.logout();
+        ui.showLoggedOut();
+        window._companionRaces = null;
+        $('#js-version-banner').hide();
+        $('#js-version-blocked-banner').hide();
+    } else {
+        // Open companion login in browser window
+        auth.loginWithBrowser(
+            function (user) {
+                ui.showLoggedIn(user);
+                companion.fetchTodayRaces(function (races) {
+                    window._companionRaces = races;
+                    ui.populateRaceSelect(races);
+                });
+                runVersionCheck();
+            },
+            function () {
+                dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', message: i18n.__('dialog-login-error'), buttons: ['Ok'] });
+            }
+        );
     }
-});
-
-// Companion logout
-$('#js-companion-logout').on('click', () => {
-    auth.logout();
-    ui.showLoggedOut();
-    window._companionRaces = null;
-    $('#js-version-banner').hide();
-    $('#js-version-blocked-banner').hide();
 });
 
 // Companion race select change — populate categories
