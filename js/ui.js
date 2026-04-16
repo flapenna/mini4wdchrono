@@ -457,9 +457,16 @@ const initRace = (freeRound) => {
     else {
         const playerList = tournament.players;
         const mancheList = storage.getManches();
-        $('#name-lane0').text(playerList[mancheList[currManche][currRound][0]] || '//');
-        $('#name-lane1').text(playerList[mancheList[currManche][currRound][1]] || '//');
-        $('#name-lane2').text(playerList[mancheList[currManche][currRound][2]] || '//');
+        const round = mancheList && mancheList[currManche] && mancheList[currManche][currRound];
+        if (round) {
+            $('#name-lane0').text(playerList[round[0]] || '//');
+            $('#name-lane1').text(playerList[round[1]] || '//');
+            $('#name-lane2').text(playerList[round[2]] || '//');
+        } else {
+            $('#name-lane0').text('//');
+            $('#name-lane1').text('//');
+            $('#name-lane2').text('//');
+        }
         $('#curr-manche').text(mancheName(currManche));
         $('#curr-round').text(`ROUND ${currRound + 1}`);
         showNextRoundNames();
