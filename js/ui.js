@@ -442,7 +442,7 @@ const initRace = (freeRound) => {
     updateUiState(freeRound);
     $('.js-show-on-race-running').hide();
 
-    if (tournament === null) {
+    if (tournament == null) { // eslint-disable-line eqeqeq -- electron-settings returns undefined for missing keys
         $('#name-lane0').text(' ');
         $('#name-lane1').text(' ');
         $('#name-lane2').text(' ');
