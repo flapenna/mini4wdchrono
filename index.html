@@ -45,11 +45,32 @@
 									<span id="tag-tournament-status" class="tag is-danger is-uppercase">-</span>
 								</div>
 							</div>
+							<div class="control">
+								<div class="tags has-addons" id="js-companion-tag" style="cursor: pointer;">
+									<span class="tag tn" data-tn="tag-companion">Companion</span>
+									<span id="tag-companion-status" class="tag is-danger is-uppercase">not connected</span>
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
 			</div>
 		</nav>
+
+		<!-- VERSION WARNING BANNER -->
+		<div id="js-version-banner" class="notification is-warning" style="display: none; margin: 0 1rem;">
+			<button class="delete" onclick="document.getElementById('js-version-banner').style.display='none'"></button>
+			<strong id="js-version-banner-title">Update available</strong>
+			<span id="js-version-banner-message"></span>
+			<a id="js-version-banner-link" href="#" target="_blank" class="button is-small is-warning is-inverted" style="margin-left: 8px;">Download</a>
+		</div>
+
+		<!-- VERSION BLOCKED BANNER -->
+		<div id="js-version-blocked-banner" class="notification is-danger" style="display: none; margin: 0 1rem;">
+			<strong id="js-version-blocked-title">Update required</strong>
+			<span id="js-version-blocked-message"></span>
+			<a id="js-version-blocked-link" href="#" target="_blank" class="button is-small is-danger is-inverted" style="margin-left: 8px;">Download</a>
+		</div>
 
 		<!-- TABS -->
 		<div class="tabs is-centered is-boxed is-hidden-print">
@@ -193,6 +214,31 @@
 						<a id="js-link-tournament" href="#" class="button tn" data-tn="button-open-tournament-editor">
 							See in Mini4WD Tournament Generator &gt;
 						</a>
+					</div>
+				</div>
+
+				<!-- Companion race picker (shown when logged in) -->
+				<div id="js-companion-race-section" style="display: none;">
+					<hr>
+					<label class="label tn" data-tn="label-companion-load">Or load from Mini4WD Companion</label>
+					<div class="field">
+						<div class="control">
+							<div class="select is-fullwidth">
+								<select id="js-companion-race-select"></select>
+							</div>
+						</div>
+					</div>
+					<div class="field has-addons">
+						<div class="control is-expanded">
+							<div class="select is-fullwidth">
+								<select id="js-companion-category-select"></select>
+							</div>
+						</div>
+						<div class="control">
+							<button id="js-companion-load-tournament" class="button is-info tn" data-tn="button-load">
+								Load
+							</button>
+						</div>
 					</div>
 				</div>
 			</div>

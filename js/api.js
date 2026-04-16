@@ -1,8 +1,11 @@
 'use strict';
 
 const storage = require('./storage');
+const auth = require('./auth');
+const { app } = require('electron').remote;
 
 const BASE_URL = 'https://mini4wd-companion.com';
+const APP_VERSION = app.getVersion();
 
 // Track last submitted payload per heat to avoid redundant API calls
 const lastSubmitted = {};
@@ -75,6 +78,23 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
         results: results
     };
 
+    // Detect if this is a finals manche and add finals-specific fields
+    const qualifierCount = tournament.mancheCount || tournament.manches.length;
+    if (mancheIndex >= qualifierCount && tournament.finals) {
+        body.round_type = 'final';
+        const finalsIndex = mancheIndex - qualifierCount;
+        if (tournament.finals.length >= 2) {
+            // Two brackets: first is finalina, last is final
+            body.finals_bracket = (finalsIndex === 0) ? 'finalina' : 'final';
+        } else {
+            // Only one bracket: it's the final
+            body.finals_bracket = 'final';
+        }
+        // roundIndex (0-2) is the Latin Square rotation within the bracket
+        body.finals_round_number = roundIndex + 1;
+        console.log(`API: Finals detected - bracket=${body.finals_bracket} round=${body.finals_round_number}`);
+    }
+
     // Use a unique key combining manche and round for deduplication
     const cacheKey = `m${mancheIndex}r${roundIndex}`;
     const payloadJson = JSON.stringify(body);
@@ -85,11 +105,20 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
 
     console.log(`API: POSTing MANCHE ${mancheNumber} round ${roundIndex + 1} to ${url}`, JSON.stringify(body, null, 2));
 
-    $.ajax({
+    const ajaxOptions = {
         url: url,
         type: 'POST',
         contentType: 'application/json',
-        data: payloadJson,
+        data: payloadJson
+    };
+
+    ajaxOptions.headers = { 'X-Chrono-Version': APP_VERSION };
+    const token = auth.getToken();
+    if (token) {
+        ajaxOptions.headers['Authorization'] = 'Bearer ' + token;
+    }
+
+    $.ajax(Object.assign(ajaxOptions, {
         success: (response) => {
             lastSubmitted[cacheKey] = payloadJson;
             console.log(`API: MANCHE ${mancheNumber} round ${roundIndex + 1} submitted`, response);
@@ -97,7 +126,7 @@ const submitRoundResult = (mancheIndex, roundIndex) => {
         error: (xhr, status, error) => {
             console.error(`API: failed to submit MANCHE ${mancheNumber} round ${roundIndex + 1}`, status, error);
         }
-    });
+    }));
 };
 
 // Submit all completed rounds to the API (used when saving from tabella manche)
@@ -124,7 +153,33 @@ const submitAllCompletedRounds = () => {
     });
 };
 
+// Check if this chrono version is up to date
+const checkVersion = (callback) => {
+    const url = `${BASE_URL}/api/v1/public/chrono/version-check?version=${APP_VERSION}`;
+
+    $.ajax({
+        url: url,
+        type: 'GET',
+        contentType: 'application/json',
+        headers: { 'X-Chrono-Version': APP_VERSION },
+        success: (response) => {
+            const data = response.data || response;
+            console.log('API: version check result:', data.status);
+            if (callback) {
+                callback(data);
+            }
+        },
+        error: (xhr, status, error) => {
+            console.error('API: version check failed', status, error);
+            if (callback) {
+                callback(null);
+            }
+        }
+    });
+};
+
 module.exports = {
     submitRoundResult: submitRoundResult,
-    submitAllCompletedRounds: submitAllCompletedRounds
+    submitAllCompletedRounds: submitAllCompletedRounds,
+    checkVersion: checkVersion
 };

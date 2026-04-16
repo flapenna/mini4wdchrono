@@ -13,9 +13,13 @@ if (process.argv.includes('--watch')) {
 }
 
 
+// Register mini4wdchrono:// custom protocol for companion auth callback
+app.setAsDefaultProtocolClient('mini4wdchrono');
+
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
+let pendingAuthUrl = null;
 
 function createWindow() {
     // Create the browser window.
@@ -81,13 +85,35 @@ app.allowRendererProcessReuse = false;
 // Prevent multiple instances of this app to run.
 const gotTheLock = app.requestSingleInstanceLock();
 
-app.on('second-instance', () => {
+app.on('second-instance', (event, argv) => {
     // Someone tried to run a second instance, we should focus our window.
     if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.focus();
     }
+    // On Windows/Linux, the custom protocol URL comes as a command line argument
+    const authUrl = argv.find(arg => arg.startsWith('mini4wdchrono://'));
+    if (authUrl) {
+        handleAuthCallback(authUrl);
+    }
 });
+
+// macOS: handle custom protocol URL when app is already running
+app.on('open-url', (event, url) => {
+    event.preventDefault();
+    if (mainWindow) {
+        handleAuthCallback(url);
+    } else {
+        pendingAuthUrl = url;
+    }
+});
+
+function handleAuthCallback(url) {
+    const match = url.match(/[?&]token=([^&]+)/);
+    if (match && mainWindow) {
+        mainWindow.webContents.send('companion-auth-callback', match[1]);
+    }
+}
 
 if (!gotTheLock) {
     return app.quit();
@@ -96,7 +122,19 @@ if (!gotTheLock) {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+    createWindow();
+    // Handle auth URL that arrived before window was ready (macOS)
+    if (pendingAuthUrl) {
+        handleAuthCallback(pendingAuthUrl);
+        pendingAuthUrl = null;
+    }
+    // Check process.argv for auth URL (Windows/Linux cold start)
+    const authArg = process.argv.find(arg => arg.startsWith('mini4wdchrono://'));
+    if (authArg) {
+        handleAuthCallback(authArg);
+    }
+});
 
 // Quit when all windows are closed.
 app.on('window-all-closed', function () {

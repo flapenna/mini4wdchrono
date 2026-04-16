@@ -38,9 +38,65 @@ const storage = require('./js/storage');
 const client = require('./js/client');
 const ui = require('./js/ui');
 const xls = require('./js/export');
+const auth = require('./js/auth');
+const companion = require('./js/companion');
+const api = require('./js/api');
 
 // load race from file
 storage.loadRace();
+
+// Check chrono version against companion server
+const runVersionCheck = function () {
+    api.checkVersion(function (data) {
+        if (!data) return;
+        if (data.status === 'blocked') {
+            $('#js-version-blocked-message').text(
+                ` ${i18n.__('version-blocked-detail').replace('{{version}}', data.min_version)}`
+            );
+            if (data.download_url) {
+                $('#js-version-blocked-link').attr('href', data.download_url).show();
+            } else {
+                $('#js-version-blocked-link').hide();
+            }
+            $('#js-version-blocked-banner').show();
+            $('#js-version-banner').hide();
+        } else if (data.status === 'update_available') {
+            $('#js-version-banner-message').text(
+                ` ${i18n.__('version-update-detail').replace('{{version}}', data.recommended_version)}`
+            );
+            if (data.download_url) {
+                $('#js-version-banner-link').attr('href', data.download_url).show();
+            } else {
+                $('#js-version-banner-link').hide();
+            }
+            $('#js-version-banner').show();
+            $('#js-version-blocked-banner').hide();
+        } else {
+            $('#js-version-banner').hide();
+            $('#js-version-blocked-banner').hide();
+        }
+    });
+};
+
+// Initialize companion auth and restore login state
+auth.init();
+if (auth.isLoggedIn()) {
+    ui.showLoggedIn(auth.getUser());
+    companion.fetchTodayRaces(function (races) {
+        window._companionRaces = races;
+        ui.populateRaceSelect(races);
+    });
+    runVersionCheck();
+    // Validate token in background
+    auth.validate(function (user) {
+        ui.showLoggedIn(user);
+    }, function () {
+        ui.showLoggedOut();
+        window._companionRaces = null;
+    });
+} else {
+    ui.showLoggedOut();
+}
 
 // Show version in about tab
 $('#js-about-version').text(`Version ${app.getVersion()}`);
@@ -331,6 +387,53 @@ $('#js-load-tournament').on('click', (e) => {
     const $this = $(e.currentTarget);
     if ($this.attr('disabled')) return;
     const code = $('#js-input-tournament-code').val().slice(-6);
+    client.loadTournament(code);
+});
+
+// Companion tag click — login or logout
+$('#js-companion-tag').on('click', () => {
+    if (auth.isLoggedIn()) {
+        // Logout
+        auth.logout();
+        ui.showLoggedOut();
+        window._companionRaces = null;
+        $('#js-version-banner').hide();
+        $('#js-version-blocked-banner').hide();
+    } else {
+        // Open companion login in browser window
+        auth.loginWithBrowser(
+            function (user) {
+                ui.showLoggedIn(user);
+                companion.fetchTodayRaces(function (races) {
+                    window._companionRaces = races;
+                    ui.populateRaceSelect(races);
+                });
+                runVersionCheck();
+            },
+            function () {
+                dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', message: i18n.__('dialog-login-error'), buttons: ['Ok'] });
+            }
+        );
+    }
+});
+
+// Companion race select change — populate categories
+$('#js-companion-race-select').on('change', () => {
+    const raceId = $('#js-companion-race-select').val();
+    if (!raceId || !window._companionRaces) {
+        ui.populateCategorySelect([]);
+        return;
+    }
+    const race = window._companionRaces.find(function (r) { return r.id === raceId; });
+    if (race && race.categories) {
+        ui.populateCategorySelect(race.categories);
+    }
+});
+
+// Companion load tournament from selected category
+$('#js-companion-load-tournament').on('click', () => {
+    const code = $('#js-companion-category-select').val();
+    if (!code) return;
     client.loadTournament(code);
 });
 
