@@ -397,9 +397,14 @@ const showNextRoundNames = () => {
     const currManche = storage.get('currManche');
     const currRound = storage.get('currRound');
     const tournament = storage.get('tournament');
-    const playerList = tournament.players;
     const mancheList = storage.getManches();
 
+    if (!tournament || !mancheList || !mancheList[currManche]) {
+        $('#next-round-names').text('');
+        return;
+    }
+
+    const playerList = tournament.players;
     let r = currRound, m = currManche, names;
     let label = i18n.__('label-next-round');
     r += 1;
@@ -409,7 +414,7 @@ const showNextRoundNames = () => {
         label = i18n.__('label-next-round-end');
     }
 
-    if (m === mancheList.length) {
+    if (m >= mancheList.length || !mancheList[m] || !mancheList[m][r]) {
         names = ['-'];
     }
     else {
