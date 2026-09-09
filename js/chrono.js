@@ -223,6 +223,12 @@ const calculateRace = () => {
 // Finds the next lane in the configured track order.
 const nextLane = (lane) => {
     const currentIndex = state.laneOrder.indexOf(lane);
+    if (currentIndex === -1) {
+        // Lane is absent from the order, as on a same-lane (1-1-1) track:
+        // the car stays where it is instead of being sent to the first lane.
+        return lane;
+    }
+
     const nextIndex = (currentIndex + 1) % state.laneOrder.length;
 
     return state.laneOrder[nextIndex];

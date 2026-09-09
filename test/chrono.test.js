@@ -315,3 +315,45 @@ describe('chrono', () => {
         assert.equal(chrono.stopRace(), false);
     });
 });
+
+describe('chrono on a same-lane track', () => {
+    const sameLaneTrack = { length: 30, order: [1, 1, 1] };
+
+    after(() => {
+        storage.get = originalStorageGet;
+    });
+
+    test('keeps every car in the lane it started from', () => {
+        chrono.init(sameLaneTrack, [10, 20, 30]);
+
+        assert.deepEqual(
+            chrono.getCars().map((car) => car.nextLane),
+            [0, 1, 2]
+        );
+
+        chrono.addLap(0, 10000);
+        chrono.addLap(1, 10000);
+        chrono.addLap(2, 10000);
+
+        // Without a same-lane guard, lanes 1 and 2 are absent from the order
+        // and their cars would be redirected to lane 0.
+        assert.deepEqual(
+            chrono.getCars().map((car) => car.nextLane),
+            [0, 1, 2]
+        );
+    });
+
+    test('times a full race run entirely in the middle lane', () => {
+        chrono.init(sameLaneTrack, [-1, 20, -1]);
+
+        chrono.addLap(1, 10000);
+        chrono.addLap(1, 12000);
+        chrono.addLap(1, 14000);
+
+        const car = chrono.getCars()[1];
+
+        assert.equal(car.lapCount, 3);
+        assert.equal(car.currTime, 4000);
+        assert.deepEqual(car.splitTimes, [2000, 2000]);
+    });
+});

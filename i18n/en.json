@@ -169,5 +169,6 @@
 	"dialog-login-error": "Mini4WD Companion login failed.",
 	"dialog-login-unauthorized": "This Mini4WD Companion account is not allowed to use the chrono.",
 	"version-update-detail": "Version {{version}} is available.",
-	"version-blocked-detail": "Please update to version {{version}} or later."
+	"version-blocked-detail": "Please update to version {{version}} or later.",
+	"option-lane-same": "1-1-1-1 (same lane)"
 }
