@@ -541,8 +541,16 @@ const showNextRoundNames = () => {
     const currManche = storage.get('currManche');
     const currRound = storage.get('currRound');
     const tournament = storage.get('tournament');
-    const playerList = tournament.players;
     const mancheList = storage.getManches();
+
+    // A race saved before its tournament was loaded, or one whose manche index
+    // no longer exists, leaves nothing to announce.
+    if (!tournament || !mancheList || !mancheList[currManche]) {
+        $('#next-round-names').text('');
+        return;
+    }
+
+    const playerList = tournament.players;
 
     let r = currRound, m = currManche, names;
     let label = i18n.__('label-next-round');
@@ -553,7 +561,7 @@ const showNextRoundNames = () => {
         label = i18n.__('label-next-round-end');
     }
 
-    if (m === mancheList.length) {
+    if (m >= mancheList.length || !mancheList[m] || !mancheList[m][r]) {
         names = ['-'];
     }
     else {
@@ -602,8 +610,15 @@ const initRace = (freeRound) => {
     else {
         const playerList = tournament.players;
         const mancheList = storage.getManches();
-        const round = mancheList[currManche][currRound];
-        round.forEach((playerId, lane) => {
+        // The stored round can point outside the tournament after it is
+        // reloaded with fewer manches, or when finals have been regenerated.
+        const round = (mancheList && mancheList[currManche] && mancheList[currManche][currRound]) || [];
+        [0, 1, 2].forEach((lane) => {
+            const playerId = round[lane];
+            if (playerId === undefined) {
+                $(`#name-lane${lane}`).text('//');
+                return;
+            }
             const playerName = playerId === -1 ? i18n.__('label-car-empty') : playerList[playerId] || '//';
             $(`#name-lane${lane}`).text(playerName);
         });
