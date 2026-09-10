@@ -53,9 +53,9 @@
 								</div>
 							</div>
 							<div class="control">
-								<div id="js-companion-tag" class="tags has-addons is-clickable">
+								<div id="js-companion-tag" class="tags has-addons">
 									<span class="tag tn" data-tn="tag-companion">Companion</span>
-									<span id="tag-companion-status" class="tag is-danger is-uppercase tn" data-tn="tag-not-connected">not connected</span>
+									<span id="tag-companion-status" class="tag is-light is-uppercase tn" data-tn="tag-not-connected">not connected</span>
 								</div>
 							</div>
 						</div>
@@ -136,6 +136,33 @@
 
 	<!-- SETUP TAB -->
 	<div class="container" data-tab="setup">
+
+		<!-- Companion invite, hidden once the organizer logs in or dismisses it for good -->
+		<div id="js-companion-banner" class="notification is-info is-light mb-5" style="display: none;">
+			<div class="level is-mobile">
+				<div class="level-left">
+					<div class="level-item">
+						<span class="icon is-medium mr-3" aria-hidden="true"><i class="fa-solid fa-circle-info fa-lg"></i></span>
+						<div>
+							<p class="has-text-weight-semibold tn" data-tn="label-companion-banner-title">Connect to Mini4WD Companion</p>
+							<p class="tn" data-tn="label-companion-banner-hint">Log in with your organizer account to load the races of the day and send the results automatically.</p>
+						</div>
+					</div>
+				</div>
+				<div class="level-right">
+					<div class="level-item">
+						<button class="button is-info js-companion-login">
+							<span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-right-to-bracket"></i></span>
+							<span class="tn" data-tn="button-companion-login">Log in</span>
+						</button>
+					</div>
+					<div class="level-item">
+						<button id="js-companion-banner-close" class="delete ml-3" aria-label="close"></button>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<p class="has-text-centered">
 			<a href="#" class="button is-info open-modal" data-modal="modal-new" style="width: 200px;">
 				<span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-plus"></i></span>
@@ -235,9 +262,38 @@
 				</div>
 			</div>
 
-			<!-- Mini4WD Companion race picker, shown when an organizer is logged in -->
+			<!-- Mini4WD Companion: login prompt, replaced by the race picker once logged in -->
+			<label class="label mt-5 tn" data-tn="label-companion-load">Or load from Mini4WD Companion</label>
+
+			<div id="js-companion-login-section" style="display: none;">
+				<p class="has-text-grey">
+					<span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-circle-info"></i></span>
+					<span class="tn" data-tn="label-companion-login-hint">Log in with your organizer account to load the races of the day.</span>
+					<button class="button is-small is-info is-light ml-2 js-companion-login">
+						<span class="tn" data-tn="button-companion-login">Log in</span>
+					</button>
+				</p>
+			</div>
+
 			<div id="js-companion-race-section" style="display: none;">
-				<label class="label tn" data-tn="label-companion-load">Or load from Mini4WD Companion</label>
+				<div class="level is-mobile mb-3">
+					<div class="level-left">
+						<div class="level-item">
+							<span class="tag is-success is-medium">
+								<span class="icon is-small mr-1" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></span>
+								<span id="js-companion-user">-</span>
+							</span>
+						</div>
+					</div>
+					<div class="level-right">
+						<div class="level-item">
+							<button id="js-companion-logout" class="button is-small is-light">
+								<span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-right-from-bracket"></i></span>
+								<span class="tn" data-tn="button-companion-logout">Log out</span>
+							</button>
+						</div>
+					</div>
+				</div>
 				<div class="field">
 					<div class="control">
 						<div class="select is-fullwidth">

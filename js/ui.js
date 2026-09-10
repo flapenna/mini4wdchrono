@@ -12,6 +12,10 @@ const companionApi = require('./companion_api');
 // Races returned by the last Companion "today" lookup, indexed by race id.
 let companionRaces = [];
 
+// Whether the user closed the Companion invite. Deliberately not persisted:
+// the invite comes back on the next launch if they are still logged out.
+let companionBannerDismissed = false;
+
 // Opens a modal and prevents page scrolling.
 const openModal = (modal) => {
     $(`#${modal}`).addClass('is-active');
@@ -834,16 +838,25 @@ const populateRaceSelect = (races) => {
 // Shows the Companion badge and race picker for an authenticated organizer.
 const companionLoggedIn = (user) => {
     const displayName = user.display_name || user.first_name || user.name || user.email || '-';
-    $('#tag-companion-status').removeClass('is-danger').addClass('is-success').text(displayName);
+    $('#tag-companion-status').removeClass('is-light').addClass('is-success').text(displayName);
+    $('#js-companion-user').text(displayName);
+    $('#js-companion-banner').hide();
+    $('#js-companion-login-section').hide();
     $('#js-companion-race-section').show();
 };
 
-// Resets the Companion badge and hides the race picker.
+// Resets the Companion badge and shows the login prompt in place of the race picker.
+// The setup-tab invite comes back too, unless it was closed earlier this session.
 const companionLoggedOut = () => {
     companionRaces = [];
-    $('#tag-companion-status').removeClass('is-success').addClass('is-danger')
+    $('#tag-companion-status').removeClass('is-success').addClass('is-light')
         .text(i18n.__('tag-not-connected'));
+    $('#js-companion-user').text('-');
     $('#js-companion-race-section').hide();
+    $('#js-companion-login-section').show();
+    if (!companionBannerDismissed) {
+        $('#js-companion-banner').show();
+    }
     $('#js-companion-race-select').empty();
     $('#js-companion-category-select').empty();
     hideVersionBanners();
@@ -911,14 +924,8 @@ const initCompanion = () => {
 const setupEventHandlers = (deps) => {
     const { client, storage, configuration, startRaceCallback } = deps;
 
-    // Companion badge: log in through the browser, or log out.
-    $('#js-companion-tag').on('click', () => {
-        if (companionAuth.isLoggedIn()) {
-            companionAuth.logout();
-            companionLoggedOut();
-            return;
-        }
-
+    // Race setup tab: start the browser login flow from the Companion section.
+    $('.js-companion-login').on('click', () => {
         companionAuth.loginWithBrowser((user) => {
             companionLoggedIn(user);
             refreshCompanionData();
@@ -931,6 +938,25 @@ const setupEventHandlers = (deps) => {
                 buttons: ['Ok']
             });
         });
+    });
+
+    // Race setup tab: hide the Companion invite for the rest of this session.
+    $('#js-companion-banner-close').on('click', () => {
+        companionBannerDismissed = true;
+        $('#js-companion-banner').hide();
+    });
+
+    // Race setup tab: drop the Companion session, after confirmation.
+    $('#js-companion-logout').on('click', () => {
+        const result = window.electronAPI.showMessageBoxSync({
+            type: 'warning',
+            message: i18n.__('dialog-companion-logout'),
+            buttons: ['Ok', 'Cancel']
+        });
+        if (result !== 0) return;
+
+        companionAuth.logout();
+        companionLoggedOut();
     });
 
     // Dismiss the optional-update banner.
