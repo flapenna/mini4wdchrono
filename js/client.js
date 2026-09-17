@@ -1,36 +1,44 @@
 'use strict';
 
-const { dialog, getCurrentWindow } = require('electron').remote;
 const ui = require('./ui');
 const utils = require('./utils');
+const configuration = require('./configuration');
 const storage = require('./storage');
 const chrono = require('./chrono');
 const xls = require('./export');
-const api = require('./api');
+const companionApi = require('./companion_api');
 const i18n = new (require('../i18n/i18n'));
 const clone = require('clone');
+const log = require('./logger');
+
+// Sentinel time stored for a car that did not finish.
+const DNF_TIME = 99999;
 
 let currTrack, currTournament, ledManager;
 let mancheList, mancheCount;
 let currManche = 0, currRound = 0, raceStarting = false, raceRunning = false, freeRound = true;
-
 let timerIntervals = [], timerSeconds = [];
-const pageTimerSeconds = [$('#timer-lane0'), $('#timer-lane1'), $('#timer-lane2')];
+let pageTimerSeconds;
 let checkRaceTask;
+let checkStartTask;
+let checkRaceInProgress = false;
 
+// Initializes renderer state from cached race data and dependencies.
 const init = (params) => {
-    console.log('client.init called');
-
-    ledManager = params.led_manager;
     ui.init();
     ui.gotoTab(configuration.get('tab'));
 
     // init variables
+    pageTimerSeconds = [$('#timer-lane0'), $('#timer-lane1'), $('#timer-lane2')];
+    ledManager = params.led_manager;
     mancheList = [];
+    mancheCount = 0;
     currManche = storage.get('currManche') || 0;
     currRound = storage.get('currRound') || 0;
     currTrack = null;
     currTournament = null;
+    freeRound = true;
+    raceStarting = false;
     raceRunning = false;
 
     // load track from settings (do this before tournament)
@@ -48,26 +56,30 @@ const init = (params) => {
     showTournamentDetails();
 };
 
-const reset = (name) => {
-    console.log('client.reset called');
-
+// Resets client state and creates a named race.
+const reset = (name, onComplete) => {
     mancheList = [];
+    mancheCount = 0;
     currManche = 0;
     currRound = 0;
     currTrack = null;
     currTournament = null;
+    freeRound = true;
+    raceStarting = false;
     raceRunning = false;
 
-    storage.newRace(name);
-    ui.init();
+    storage.newRace(name, (filename) => {
+        log.info('[Race setup] New race created', { name: name, filename: filename });
+        ui.init();
 
-    showTrackDetails();
-    showTournamentDetails();
+        showTrackDetails();
+        showTournamentDetails();
+        if (onComplete) onComplete();
+    });
 };
 
+// Initializes the timing engine for the active round.
 const chronoInit = (reset) => {
-    console.log('client.chronoInit called');
-
     if (currTournament === null || freeRound) {
     // free round
         chrono.init(currTrack);
@@ -80,100 +92,59 @@ const chronoInit = (reset) => {
     else {
     // load existing round
         const cars = storage.loadRound(currManche, currRound);
-        chrono.init(currTrack, mancheList[currManche][currRound], cars);
+        if (cars) {
+            chrono.init(currTrack, mancheList[currManche][currRound], cars);
+        } else {
+            chrono.init(currTrack, mancheList[currManche][currRound]);
+        }
     }
 };
 
 // ==========================================================================
 // ==== time list handling
 
-// Creates default car objects for a round that was never raced
-const buildEmptyCars = (mindex, rindex) => {
-    // Use storage.getManches() to ensure consistency with UI display
-    const manches = storage.getManches();
-    const round = manches[mindex][rindex];
-    console.log(`buildEmptyCars: manche=${mindex}, round=${rindex}, playerIds=${JSON.stringify(round)}`);
-    return round.map((playerId, idx) => {
-        console.log(`buildEmptyCars: creating car[${idx}] with playerId=${playerId}`);
-        return {
-            playerId: playerId,
-            startLane: 0,
-            nextLane: 0,
-            lapCount: 0,
-            startTimestamp: 0,
-            currTimestamp: 0,
-            endTimestamp: 0,
-            currTime: 0,
-            splitTimes: [],
-            position: 0,
-            delayFromFirst: 0,
-            speed: 0,
-            outOfBounds: false
-        };
-    });
-};
-
+// Disqualifies a player in the specified or current round.
 const disqualify = (mindex, rindex, pindex) => {
-    console.log('client.disqualify called');
-
-    mindex = mindex || currManche;
-    rindex = rindex || currRound;
-    let cars = storage.loadRound(mindex, rindex);
-    if (!cars) {
-        cars = buildEmptyCars(mindex, rindex);
-    }
+    mindex = mindex === undefined || mindex === null ? currManche : mindex;
+    rindex = rindex === undefined || rindex === null ? currRound : rindex;
+    const cars = storage.loadRound(mindex, rindex);
     cars[pindex].originalTime = cars[pindex].currTime;
-    cars[pindex].currTime = 99999;
+    cars[pindex].currTime = DNF_TIME;
+    // The race view renders DNF from outOfBounds, not from the time value.
     cars[pindex].outOfBounds = true;
     storage.saveRound(mindex, rindex, cars);
-    api.submitRoundResult(mindex, rindex);
+    companionApi.submitRoundResult(mindex, rindex);
 
     ui.initRace(freeRound);
     updateRace();
 };
 
-// Reads all input fields in the manches tab and rebuilds time list
+// Reads edited round times from the UI and persists them.
 const overrideTimes = () => {
-    console.log('client.overrideTimes called');
-
-    // Use storage.getManches() to ensure consistency with UI display
-    const manches = storage.getManches();
-    const tournament = storage.get('tournament');
-    console.log('overrideTimes: players=', JSON.stringify(tournament.players));
-
     let time, newTime, oldTime, cars;
-    _.each(manches, (manche, mindex) => {
-        _.each(manche, (round, rindex) => {
-            console.log(`overrideTimes: processing manche=${mindex}, round=${rindex}, roundConfig=${JSON.stringify(round)}`);
+    mancheList.forEach((manche, mindex) => {
+        manche.forEach((round, rindex) => {
             cars = storage.loadRound(mindex, rindex);
-            if (!cars) {
-                cars = buildEmptyCars(mindex, rindex);
-            }
-            console.log(`overrideTimes: cars playerIds=${JSON.stringify(cars.map(c => c.playerId))}`);
-            _.each(round, (_playerId, pindex) => {
-                time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
-                console.log(`overrideTimes: pindex=${pindex}, playerId=${_playerId}, inputTime=${time}`);
-                if (time) {
-                    newTime = utils.safeTime(time);
-                    oldTime = cars[pindex].currTime;
-                    console.log(`overrideTimes: pindex=${pindex}, safeTime=${newTime}, oldTime=${oldTime}, oldOutOfBounds=${cars[pindex].outOfBounds}`);
-                    if (newTime !== oldTime) {
-                        cars[pindex].originalTime = oldTime;
-                        cars[pindex].currTime = newTime;
+            if (cars) {
+                round.forEach((_playerId, pindex) => {
+                    time = $(`input[data-manche='${mindex}'][data-round='${rindex}'][data-player='${pindex}']`).val();
+                    if (time) {
+                        newTime = utils.safeTime(time);
+                        oldTime = cars[pindex].currTime;
+                        if (newTime !== oldTime) {
+                            cars[pindex].originalTime = oldTime;
+                            cars[pindex].currTime = newTime;
+                        }
+                        // Keep the DNF flag in step with the time an operator typed,
+                        // so editing a DNF back to a real time clears it and vice versa.
+                        cars[pindex].outOfBounds = (cars[pindex].currTime === DNF_TIME);
                     }
-                    // Always sync outOfBounds with current time value,
-                    // even if time didn't change (fixes stale outOfBounds flag)
-                    cars[pindex].outOfBounds = (cars[pindex].currTime === 99999);
-                    console.log(`overrideTimes: pindex=${pindex}, newCurrTime=${cars[pindex].currTime}, newOutOfBounds=${cars[pindex].outOfBounds}`);
-                }
-            });
+                });
+            }
             storage.saveRound(mindex, rindex, cars);
-            // Verify save/load roundtrip
-            const verify = storage.loadRound(mindex, rindex);
-            console.log(`overrideTimes: VERIFY after save m=${mindex} r=${rindex}`, JSON.stringify(verify.map(c => ({ currTime: c.currTime, outOfBounds: c.outOfBounds }))));
         });
     });
-    api.submitAllCompletedRounds();
+    companionApi.submitAllCompletedRounds();
 
     ui.showPlayerList();
     ui.showMancheList();
@@ -181,10 +152,9 @@ const overrideTimes = () => {
     updateRace();
 };
 
+// Generates tournament final rounds from the current rankings.
 const initFinal = () => {
-    console.log('client.initFinal called');
-
-    const ids = _.map(storage.getSortedPlayerList(), (t) => { return t.id; });
+    const ids = storage.getSortedPlayerList().map((t) => { return t.id; });
 
     // remove any previously generated finals
     mancheList = mancheList.slice(0, mancheCount);
@@ -219,12 +189,11 @@ const initFinal = () => {
 // ==========================================================================
 // ==== handle interface buttons
 
+// Validates race state and starts the configured race sequence.
 const startRace = (debugMode) => {
-    console.log('client.startRace called');
-
     if (!storage.get('track')) {
     // track not loaded
-        dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', title: 'Error', message: i18n.__('dialog-track-not-loaded'), buttons: ['Ok'] });
+        window.electronAPI.showMessageBoxSync({ type: 'error', title: 'Error', message: i18n.__('dialog-track-not-loaded'), buttons: ['Ok'] });
         return;
     }
     if ($('div[data-tab=race]').is(':hidden')) {
@@ -246,7 +215,8 @@ const startRace = (debugMode) => {
     else {
     // production mode
         if (!freeRound && storage.get('tournament') && storage.loadRound()) {
-            if (dialog.showMessageBoxSync(getCurrentWindow(), { type: 'warning', message: i18n.__('dialog-replay-round'), buttons: ['Ok', 'Cancel'] }) === 1) {
+            const result = window.electronAPI.showMessageBoxSync({ type: 'warning', message: i18n.__('dialog-replay-round'), buttons: ['Ok', 'Cancel'] });
+            if (result === 1) {
                 return;
             }
         }
@@ -257,24 +227,22 @@ const startRace = (debugMode) => {
     }
 };
 
-// called before the starting sequence
+// Prepares the timing engine before the starting sequence.
 const initRound = () => {
-    console.log('client.initRound called');
-
     chronoInit(!freeRound);
     updateRace();
 };
 
-// called when the starting sequence has finished
+// Starts race timers after the starting sequence finishes.
 const startRound = () => {
-    console.log('client.startRound called');
-
-    timerIntervals = [];
+    timerIntervals = [null, null, null];
     timerSeconds = [];
 
     // run tasks periodically
+    clearInterval(checkRaceTask);
+    clearTimeout(checkStartTask);
     checkRaceTask = setInterval(checkRace, 500);
-    setTimeout(checkStart, storage.get('startDelay') * 1000);
+    checkStartTask = setTimeout(checkStart, storage.get('startDelay') * 1000);
 
     raceStarting = false;
     raceRunning = true;
@@ -287,23 +255,27 @@ const startRound = () => {
     }
 };
 
-// called when the stop button is pressed
+// Stops an active race when the stop control is pressed.
 const stopRace = () => {
-    console.log('client.stopRace called');
-    if (raceStarting) {
+    if (raceStarting || !raceRunning) {
         return false;
     }
 
-    chrono.stopRace();
-    checkRace();
+    const changed = chrono.stopRace();
+
+    if (chrono.isRaceFinished()) {
+        raceFinished();
+        updateRace();
+    }
+
+    return changed;
 };
 
+// Navigates to the previous tournament round after confirmation.
 const prevRound = () => {
-    console.log('client.prevRound called');
-
     if (currTournament === null || currTrack === null) {
     // tournament not loaded
-        dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', title: 'Error', message: i18n.__('dialog-tournament-not-loaded'), buttons: ['Ok'] });
+        window.electronAPI.showMessageBoxSync({ type: 'error', title: 'Error', message: i18n.__('dialog-tournament-not-loaded'), buttons: ['Ok'] });
         return;
     }
     if (currManche === 0 && currRound === 0) {
@@ -311,7 +283,8 @@ const prevRound = () => {
         return;
     }
 
-    if (dialog.showMessageBoxSync(getCurrentWindow(), { type: 'warning', message: i18n.__('dialog-change-round'), buttons: ['Ok', 'Cancel'] }) === 0) {
+    const result = window.electronAPI.showMessageBoxSync({ type: 'warning', message: i18n.__('dialog-change-round'), buttons: ['Ok', 'Cancel'] });
+    if (result === 0) {
         currRound--;
         if (currRound < 0) {
             currManche--;
@@ -326,12 +299,11 @@ const prevRound = () => {
     }
 };
 
+// Navigates to the next tournament round after confirmation.
 const nextRound = () => {
-    console.log('client.nextRound called');
-
     if (currTournament === null || currTrack === null) {
     // tournament not loaded
-        dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', title: 'Error', message: i18n.__('dialog-tournament-not-loaded'), buttons: ['Ok'] });
+        window.electronAPI.showMessageBoxSync({ type: 'error', title: 'Error', message: i18n.__('dialog-tournament-not-loaded'), buttons: ['Ok'] });
         return;
     }
 
@@ -341,7 +313,8 @@ const nextRound = () => {
     }
 
     const dialogText = (currManche === (mancheCount - 1) && currRound === (mancheList[currManche].length - 1) && !currTournament.finals) ? i18n.__('dialog-enter-final') : i18n.__('dialog-change-round');
-    if (dialog.showMessageBoxSync(getCurrentWindow(), { type: 'warning', message: dialogText, buttons: ['Ok', 'Cancel'] }) === 0) {
+    const result = window.electronAPI.showMessageBoxSync({ type: 'warning', message: dialogText, buttons: ['Ok', 'Cancel'] });
+    if (result === 0) {
         currRound++;
         if (currRound === mancheList[currManche].length) {
             currManche++;
@@ -353,6 +326,15 @@ const nextRound = () => {
                     // generate final rounds only once
                     initFinal();
                 }
+
+                // Change race mode to final
+                storage.set('raceMode', 1);
+                ui.showRaceModeDetails();
+            }
+            else {
+                // Change race mode to time attack
+                storage.set('raceMode', 0);
+                ui.showRaceModeDetails();
             }
         }
 
@@ -364,16 +346,16 @@ const nextRound = () => {
     }
 };
 
+// Navigates to a selected tournament round after confirmation.
 const gotoRound = (mindex, rindex) => {
-    console.log('client.gotoRound called');
-
     if (currTournament === null || currTrack === null) {
     // tournament not loaded
-        dialog.showMessageBoxSync(getCurrentWindow(), { type: 'error', title: 'Error', message: i18n.__('dialog-tournament-not-loaded'), buttons: ['Ok'] });
+        window.electronAPI.showMessageBoxSync({ type: 'error', title: 'Error', message: i18n.__('dialog-tournament-not-loaded'), buttons: ['Ok'] });
         return;
     }
 
-    if (dialog.showMessageBoxSync(getCurrentWindow(), { type: 'warning', message: i18n.__('dialog-change-round'), buttons: ['Ok', 'Cancel'] }) === 0) {
+    const result = window.electronAPI.showMessageBoxSync({ type: 'warning', message: i18n.__('dialog-change-round'), buttons: ['Ok', 'Cancel'] });
+    if (result === 0) {
         currManche = mindex;
         currRound = rindex;
         storage.set('currManche', currManche);
@@ -384,13 +366,14 @@ const gotoRound = (mindex, rindex) => {
     }
 };
 
+// Reports whether the current race is a free round.
 const isFreeRound = () => freeRound;
 
+// Reports whether a race is starting or currently running.
 const isStarted = () => raceStarting || raceRunning;
 
+// Switches between free-round and tournament-round modes.
 const toggleFreeRound = () => {
-    console.log('client.toggleFreeRound called');
-
     freeRound = !freeRound;
     chronoInit();
     ui.toggleFreeRound(freeRound);
@@ -398,20 +381,20 @@ const toggleFreeRound = () => {
     updateRace();
 };
 
-// keyboard shortcuts for debug
-const keydown = (keyCode) => {
+// Handles debug keyboard shortcuts for adding laps.
+const keydown = (keyCode, timestamp) => {
     if (raceRunning) {
         if (keyCode === 49 || keyCode === 97) {
             // pressed 1
-            addLap(0);
+            addLap(0, timestamp);
         }
         else if (keyCode === 50 || keyCode === 98) {
             // pressed 2
-            addLap(1);
+            addLap(1, timestamp);
         }
         else if (keyCode === 51 || keyCode === 99) {
             // pressed 3
-            addLap(2);
+            addLap(2, timestamp);
         }
     }
 };
@@ -419,43 +402,47 @@ const keydown = (keyCode) => {
 // ==========================================================================
 // ==== API calls
 
+// Loads a track definition from the remote track service.
 const loadTrack = (code) => {
-    console.log('client.loadTrack called');
-
     $.getJSON(`https://mini4wd-track-editor.pimentoso.com/api/track/${code}`)
         .done((obj) => {
+            log.info('[Race setup] Remote track loaded', { code: obj.code, length: obj.length, order: obj.order });
             trackLoadDone(obj);
         })
-        .fail(trackLoadFail)
+        .fail(() => {
+            log.error('[Race setup] Remote track load failed', { code: code });
+            trackLoadFail();
+        })
         .always(() => {
             showTrackDetails();
         });
 };
 
+// Stores a manually entered track definition.
 const setTrackManual = (length, order) => {
-    console.log('client.setTrackManual called');
-
     const obj = { 'code': i18n.__('tag-track-manual'), 'length': length, 'order': order, 'manual': true };
     storage.set('track', obj);
     trackLoadDone(obj);
 };
 
+// Loads a tournament definition from the remote tournament service.
 const loadTournament = (code) => {
-    console.log('client.loadTournament called');
-
     $.getJSON(`https://mini4wd-tournament.pimentoso.com/api/tournament/${code}`)
         .done((obj) => {
+            log.info('[Race setup] Remote tournament loaded', { code: obj.code, manches: obj.manches ? obj.manches.length : 0 });
             tournamentLoadDone(obj);
         })
-        .fail(tournamentLoadFail)
+        .fail(() => {
+            log.error('[Race setup] Remote tournament load failed', { code: code });
+            tournamentLoadFail();
+        })
         .always(() => {
             showTournamentDetails();
         });
 };
 
+// Applies a successfully loaded track to the client state.
 const trackLoadDone = (obj) => {
-    console.log('client.trackLoadDone called');
-
     currTrack = obj;
     storage.set('track', currTrack);
 
@@ -463,17 +450,24 @@ const trackLoadDone = (obj) => {
     showTrackDetails();
 };
 
-const trackLoadFail = () => {
-    console.log('client.trackLoadFail called');
+// Opens a persisted race and rebuilds client state.
+const openRace = (filename, onComplete) => {
+    storage.loadRace(filename, () => {
+        log.info('[Race setup] Race opened', { filename: filename });
+        init({ led_manager: ledManager });
+        if (onComplete) onComplete();
+    });
+};
 
+// Clears track state after a failed track load.
+const trackLoadFail = () => {
     currTrack = null;
     ui.trackLoadFail();
     showTrackDetails();
 };
 
+// Applies a successfully loaded tournament to the client state.
 const tournamentLoadDone = (obj) => {
-    console.log('client.tournamentLoadDone called');
-
     currTournament = obj;
     mancheList = clone(obj.manches);
 
@@ -489,12 +483,12 @@ const tournamentLoadDone = (obj) => {
     ui.showMancheList();
 
     freeRound = false;
+    chronoInit();
     ui.tournamentLoadDone(currTournament);
 };
 
+// Clears tournament state after a failed tournament load.
 const tournamentLoadFail = () => {
-    console.log('client.tournamentLoadFail called');
-
     currTournament = null;
     ui.tournamentLoadFail();
 };
@@ -502,22 +496,31 @@ const tournamentLoadFail = () => {
 // ==========================================================================
 // ==== race status
 
-// timer task to check for cars out of track
-const checkRace = () => {
-    console.log('client.checkRace called');
+// Checks whether cars have left the track using the main-process clock.
+const checkRace = async () => {
+    if (checkRaceInProgress || !raceRunning) return;
 
-    let redraw = chrono.checkOutCars();
-    if (chrono.isRaceFinished()) {
-        raceFinished();
-        redraw = true;
+    checkRaceInProgress = true;
+    try {
+        const timestamp = await window.electronAPI.hardwareGetTimestamp();
+
+        if (!raceRunning) return;
+
+        let redraw = chrono.checkOutCars(timestamp);
+        if (chrono.isRaceFinished()) {
+            raceFinished();
+            redraw = true;
+        }
+        if (redraw) updateRace();
+    } catch (error) {
+        log.error('[IPC] Failed to retrieve timestamp for race check:', error);
+    } finally {
+        checkRaceInProgress = false;
     }
-    if (redraw) updateRace();
 };
 
-// timer task to invalidate cars not passed in 3 seconds
+// Marks cars that did not start within the allowed time.
 const checkStart = () => {
-    console.log('client.checkStart called');
-
     let redraw = chrono.checkNotStartedCars();
     if (chrono.isRaceFinished()) {
         raceFinished();
@@ -526,19 +529,24 @@ const checkStart = () => {
     if (redraw) updateRace();
 };
 
-// called when the current round has completed. Saves times and handles UI changes
+// Finalizes the current round, persists results, and updates the UI.
 const raceFinished = () => {
-    console.log('client.raceFinished called');
+    if (!raceRunning && !raceStarting) {
+        return;
+    }
 
-    // kill race check task
+    // kill race check tasks
     clearInterval(checkRaceTask);
+    clearTimeout(checkStartTask);
+    checkRaceTask = null;
+    checkStartTask = null;
 
     const cars = chrono.getCars();
     ledManager.roundFinish(cars);
 
     if (currTournament && !freeRound) {
         storage.saveRound(currManche, currRound, cars);
-        api.submitRoundResult(currManche, currRound);
+        companionApi.submitRoundResult(currManche, currRound);
 
         ui.showPlayerList();
         ui.showMancheList();
@@ -552,9 +560,8 @@ const raceFinished = () => {
 // ==========================================================================
 // ==== write to interface
 
+// Refreshes UI and timing state after a track change.
 const showTrackDetails = () => {
-    console.log('client.showTrackDetails called');
-
     ui.showTrackDetails(currTrack);
     ui.showThresholds();
     chronoInit();
@@ -562,23 +569,21 @@ const showTrackDetails = () => {
     updateRace();
 };
 
+// Refreshes UI and timing state after a tournament change.
 const showTournamentDetails = () => {
-    console.log('client.showTournamentDetails called');
-
     ui.showTournamentDetails(currTournament);
     ui.initRace(freeRound);
     updateRace();
 };
 
+// Renders current cars and synchronizes per-lane timers.
 const updateRace = () => {
-    console.log('client.updateRace called');
-
-    let cars = (raceRunning || freeRound) ? chrono.getCars() : storage.loadRound(currManche, currRound);
+    let cars = (raceRunning || raceStarting || freeRound) ? chrono.getCars() : storage.loadRound(currManche, currRound);
     cars = cars || chrono.getCars(); // if loaded round was undefined
-    ui.drawRace(cars, raceRunning);
+    ui.drawRace(cars, raceRunning || raceStarting);
 
     // stop timers
-    _.each(cars, (car, i) => {
+    cars.forEach((car, i) => {
         if (car.outOfBounds || car.lapCount > storage.get('roundLaps')) {
             stopTimer(i);
         }
@@ -588,17 +593,20 @@ const updateRace = () => {
     });
 };
 
+// Starts the display timer for a lane when it is idle.
 const startTimer = (lane) => {
-    if (timerIntervals[lane] == null) { // eslint-disable-line eqeqeq -- intentionally catches both null and undefined
+    if (timerIntervals[lane] === null) {
         timerSeconds[lane] = 0;
         timerIntervals[lane] = setInterval(timer, 100, lane);
     }
 };
 
+// Stops the display timer for a lane.
 const stopTimer = (lane) => {
     clearInterval(timerIntervals[lane]);
 };
 
+// Advances and renders the display timer for a lane.
 const timer = (lane) => {
     pageTimerSeconds[lane].text((timerSeconds[lane]++ / 10).toFixed(3));
 };
@@ -606,23 +614,23 @@ const timer = (lane) => {
 // ==========================================================================
 // ==== export excel
 
+// Exports the current tournament when one is loaded.
 const saveXls = () => {
     if (currTournament) {
-        xls.generateXls();
+        return xls.generateXls();
     }
 };
 
 // ==========================================================================
 // ==== listen to arduino events
 
-const addLap = (lane) => {
-    console.log('client.addLap called');
-
+// Sends a main-process sensor timestamp to the timing engine.
+const addLap = (lane, timestamp) => {
     if (!raceRunning) {
         return;
     }
 
-    chrono.addLap(lane);
+    chrono.addLap(lane, timestamp);
     if (chrono.isRaceFinished()) {
         raceFinished();
     }
@@ -632,6 +640,7 @@ const addLap = (lane) => {
 module.exports = {
     init: init,
     reset: reset,
+    openRace: openRace,
     keydown: keydown,
     loadTrack: loadTrack,
     setTrackManual: setTrackManual,

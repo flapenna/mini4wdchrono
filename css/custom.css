@@ -2,16 +2,322 @@
 	max-height: unset;
 }
 
-.has-margin-vertical {
-	margin: 10px 0px;
-}
-
 .container {
-	margin-bottom: 50px;
+	padding-bottom: 20px;
 }
 
 .table tr.is-highlighted {
 	border: 3px solid hsl(204, 86%, 53%);
+}
+
+.leaderboard-title {
+	align-items: center;
+	display: flex;
+	gap: 0.65rem;
+}
+
+.racer-search-input {
+	width: 14rem;
+}
+
+.leaderboard-card {
+	background: #fff;
+	border-radius: 0.75rem;
+	box-shadow: 0 0.5em 1em -0.125em rgba(10, 10, 10, 0.08), 0 0 0 1px rgba(10, 10, 10, 0.02);
+	overflow: hidden;
+}
+
+.leaderboard-table-container {
+	max-height: calc(100vh - 16rem);
+	overflow: auto;
+}
+
+.racers-table {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.racers-table thead th {
+	background: hsl(171, 100%, 41%);
+	border-bottom: 1px solid hsl(0, 0%, 86%);
+	color: hsl(0, 0%, 97%);
+	font-size: 0.75em;
+	letter-spacing: 0.045em;
+	padding: 0.9rem 0.75rem;
+	position: sticky;
+	text-transform: uppercase;
+	top: 0;
+	z-index: 2;
+}
+
+.racers-table tbody td,
+.racers-table tbody th {
+	border-bottom: 1px solid hsl(0, 0%, 93%);
+	padding: 0.75rem 0.25rem;
+	vertical-align: middle;
+}
+
+.racers-table tbody tr:last-child td,
+.racers-table tbody tr:last-child th {
+	border-bottom: 0;
+}
+
+.racers-rank-column {
+	width: 5rem;
+}
+
+.racers-name-column {
+	min-width: 13rem;
+}
+
+.racers-time-column {
+	min-width: 7rem;
+}
+
+.racers-summary-column,
+.racers-speed-column {
+	min-width: 9rem;
+}
+
+.racers-name {
+	color: hsl(0, 0%, 21%);
+	font-size: 1em;
+	letter-spacing: 0.02em;
+	max-width: 20rem;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+
+.racers-rank-badge {
+	align-items: center;
+	background: hsl(0, 0%, 94%);
+	border-radius: 999px;
+	color: hsl(0, 0%, 35%);
+	display: inline-flex;
+	font-weight: 700;
+	gap: 0.3rem;
+	justify-content: center;
+	min-height: 2.25rem;
+	min-width: 2.25rem;
+	padding: 0.3rem 0.65rem;
+}
+
+.racers-rank-badge.is-podium-1 {
+	background: hsl(48, 100%, 90%);
+	color: hsl(42, 85%, 35%);
+}
+
+.racers-rank-badge.is-podium-2 {
+	background: hsl(0, 0%, 91%);
+	color: hsl(0, 0%, 38%);
+}
+
+.racers-rank-badge.is-podium-3 {
+	background: hsl(28, 55%, 88%);
+	color: hsl(28, 55%, 35%);
+}
+
+.racers-time {
+	font-family: monospace;
+}
+
+.racers-time.is-race-best {
+	background: hsl(348, 100%, 96%);
+	color: hsl(348, 86%, 43%);
+	font-weight: 700;
+}
+
+.racers-time.is-player-best {
+	color: hsl(348, 86%, 43%);
+	font-weight: 700;
+}
+
+.racers-best-sum {
+	background: hsl(204, 86%, 97%);
+	color: hsl(204, 71%, 39%);
+	font-weight: 700;
+}
+
+.racers-speed strong,
+.racers-speed span {
+	display: block;
+}
+
+.racers-speed span {
+	color: hsl(0, 0%, 58%);
+	font-size: 0.78em;
+	margin-top: 0.15rem;
+}
+
+.manches-table {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.manches-table thead th {
+	background: hsl(171, 100%, 41%);
+	border-bottom: 1px solid hsl(0, 0%, 86%);
+	color: hsl(0, 0%, 97%);
+	font-size: 0.75em;
+	letter-spacing: 0.045em;
+	padding: 0.9rem 0.75rem;
+	position: sticky;
+	text-transform: uppercase;
+	top: 0;
+	z-index: 3;
+}
+
+.manches-table tbody td,
+.manches-table tbody th {
+	border-bottom: 1px solid hsl(0, 0%, 93%);
+	padding: 0.85rem;
+	vertical-align: middle;
+}
+
+.manches-table .manches-section th {
+	background: hsl(171, 55%, 96%);
+	border-bottom-color: hsl(171, 35%, 85%);
+	color: hsl(171, 80%, 29%);
+	font-size: 0.8em;
+	letter-spacing: 0.06em;
+	padding: 0.65rem 1rem;
+	text-transform: uppercase;
+}
+
+.manches-group + .manches-group .manches-section th {
+	border-top: 0.5rem solid hsl(0, 0%, 96%);
+}
+
+.manches-table tr.is-current-round > td,
+.manches-table tr.is-current-round > th {
+	background: hsl(204, 86%, 97%);
+}
+
+.manches-table tr.is-current-round > th:first-child {
+	box-shadow: inset 4px 0 hsl(204, 86%, 53%);
+}
+
+.manches-round-column,
+.manches-round {
+	min-width: 10rem;
+	width: 10rem;
+}
+
+.manches-round strong,
+.manches-round .tag,
+.manches-round .button {
+	display: flex;
+	justify-content: center;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.manches-round strong {
+	color: hsl(0, 0%, 29%);
+	margin-bottom: 0.55rem;
+}
+
+.manches-lane-cell {
+	min-width: 14rem;
+	width: 30%;
+}
+
+.manches-lane-cell.is-empty {
+	color: hsl(0, 0%, 71%);
+	font-size: 1.25rem;
+	text-align: center;
+}
+
+.manches-racer-header {
+	align-items: center;
+	display: flex;
+	gap: 0.5rem;
+	justify-content: space-between;
+	margin-bottom: 0.55rem;
+}
+
+.manches-racer-header strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.manches-time-field .input {
+	background: hsl(0, 0%, 99%);
+	border-color: hsl(0, 0%, 88%);
+	border-radius: 0.5rem;
+	font-family: monospace;
+	font-variant-numeric: tabular-nums;
+	transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.manches-time-field .input:hover {
+	border-color: hsl(0, 0%, 71%);
+}
+
+.manches-time-field .input:focus {
+	border-color: hsl(171, 100%, 41%);
+	box-shadow: 0 0 0 0.125em hsla(171, 100%, 41%, 0.2);
+}
+
+.manches-lane-dot {
+	border: 2px solid hsla(0, 0%, 100%, 0.9);
+	border-radius: 999px;
+	display: inline-block;
+	height: 0.75rem;
+	margin-right: 0.4rem;
+	vertical-align: -0.1rem;
+	width: 0.75rem;
+}
+
+.manches-lane-dot-1 {
+	background: hsl(171, 100%, 30%);
+}
+
+.manches-lane-dot-2 {
+	background: hsl(48, 100%, 67%);
+}
+
+.manches-lane-dot-3 {
+	background: hsl(348, 100%, 61%);
+}
+
+.leaderboard-legend {
+	color: hsl(0, 0%, 48%);
+	display: flex;
+	font-size: 0.85rem;
+	gap: 1.25rem;
+	justify-content: flex-end;
+	margin-top: 0.75rem;
+}
+
+.leaderboard-legend > span {
+	align-items: center;
+	display: inline-flex;
+	gap: 0.2rem;
+}
+
+@media screen and (max-width: 768px) {
+	.leaderboard-header .level-right,
+	.leaderboard-header .level-right .level-item {
+		width: 100%;
+	}
+
+	.leaderboard-header .button {
+		flex: 1;
+	}
+
+	.leaderboard-table-container {
+		max-height: none;
+	}
+
+	.manches-lane-cell {
+		min-width: 12rem;
+	}
+
+	.leaderboard-legend {
+		flex-wrap: wrap;
+		justify-content: flex-start;
+	}
 }
 
 .content ul {
@@ -20,8 +326,310 @@
 	margin-top: 3em;
 }
 
-.js-time-form {
+.hardware-pin-settings {
+	border: 1px solid hsl(48, 90%, 78%);
+	padding: 0;
+}
+
+.hardware-pin-settings-summary {
+	align-items: center;
+	cursor: pointer;
+	display: flex;
+	justify-content: space-between;
+	list-style: none;
+	padding: 1.25rem;
+	user-select: none;
+}
+
+.hardware-pin-settings-summary::-webkit-details-marker {
+	display: none;
+}
+
+.hardware-pin-settings-summary:focus-visible {
+	border-radius: 0.75rem;
+	box-shadow: 0 0 0 0.125em hsla(204, 86%, 53%, 0.25);
+	outline: none;
+}
+
+.hardware-pin-settings-heading {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem;
+}
+
+.hardware-pin-settings-heading .title {
+	margin: 0;
+}
+
+.hardware-pin-settings-chevron {
+	color: hsl(0, 0%, 48%);
+	transition: transform 160ms ease;
+}
+
+.hardware-pin-settings[open] .hardware-pin-settings-chevron {
+	transform: rotate(180deg);
+}
+
+.hardware-pin-settings-content {
+	border-top: 1px solid hsl(48, 80%, 85%);
+	padding: 1.25rem;
+}
+
+.hardware-loading {
+	align-items: center;
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	height: 100vh;
+	justify-content: center;
+}
+
+.hardware-loading .loader {
+	height: 3rem;
+	width: 3rem;
+}
+
+.race-status-badges {
+	display: none;
+}
+
+.race-status-badges .tag {
+	font-size: 1.1rem;
+	min-height: 2.25em;
+	white-space: nowrap;
+}
+
+.race-lanes {
+	align-items: stretch;
+}
+
+.race-lane-card {
+	border: 2px solid transparent;
+	box-shadow: 0 0.5em 1em -0.125em rgba(10, 10, 10, 0.1), 0 0 0 1px rgba(10, 10, 10, 0.02);
+	margin: 0.5rem;
+	overflow: hidden;
+	padding: 0;
+	transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+@media screen and (min-width: 769px) {
+	.race-lanes {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.race-lane-card:not(.race-lane-dnf) {
+		height: 100%;
+	}
+}
+
+.race-lane-card-0 {
+	--race-lane-color: hsl(171, 100%, 41%);
+}
+
+.race-lane-card-1 {
+	--race-lane-color: hsl(48, 100%, 67%);
+}
+
+.race-lane-card-2 {
+	--race-lane-color: hsl(348, 100%, 61%);
+}
+
+.race-lane-heading {
+	background: var(--race-lane-color);
+	color: #fff;
+	font-size: 1.5rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	margin: 0;
+	padding: 0.75rem;
 	text-align: center;
+}
+
+.race-lane-card-1 .race-lane-heading {
+	color: hsl(0, 0%, 21%);
+}
+
+.race-lane-empty {
+	filter: grayscale(45%);
+	opacity: 0.55;
+}
+
+.race-lane-empty .race-lane-content {
+	align-items: center;
+	display: flex;
+	height: calc(100% - 3.75rem);
+	justify-content: center;
+	min-height: 18rem;
+}
+
+.race-lane-empty .race-lane-content .title {
+	color: hsl(0, 0%, 35%) !important;
+	font-size: 2rem;
+	letter-spacing: 0.08em;
+	margin-bottom: 0;
+}
+
+.race-lane-empty .race-lane-content > :not(.title) {
+	display: none !important;
+}
+
+.race-lane-content {
+	padding: 2rem 1.5rem 1.5rem;
+}
+
+.race-lane-content .title {
+	margin-bottom: 1.25rem;
+}
+
+.race-result-row,
+.race-metrics-row {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	justify-content: center;
+}
+
+.race-result {
+	background: #f5f5f5;
+	border-radius: 0.35rem;
+	font-size: 1.25rem;
+	font-weight: 700;
+	padding: 0.45rem 0.75rem;
+	text-transform: uppercase;
+}
+
+.race-result-icon {
+	color: var(--race-lane-color);
+	display: none;
+	font-size: 1.25rem;
+}
+
+.race-gap,
+.race-metrics-row > span {
+	background: #f7f7f7;
+	border-radius: 0.35rem;
+	display: inline-flex;
+	flex-direction: column;
+	font-size: 1.15rem;
+	padding: 0.35rem 0.75rem;
+}
+
+.race-metric-label {
+	color: hsl(0, 0%, 48%);
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.race-time-block {
+	margin: 1.25rem 0;
+}
+
+.race-time-block .race-metric-label {
+	display: block;
+}
+
+.js-timer {
+	font-size: clamp(4.5rem, 6vw, 6rem);
+	line-height: 1.1;
+}
+
+.race-laps {
+	margin: 1.5rem auto;
+	max-width: 28rem;
+}
+
+.race-laps-heading,
+.race-laps-list li {
+	align-items: baseline;
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	text-align: left;
+}
+
+.race-laps-heading {
+	border-bottom: 1px solid #dbdbdb;
+	color: hsl(0, 0%, 48%);
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	padding: 0 0.5rem 0.4rem;
+	text-transform: uppercase;
+}
+
+.race-laps-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.race-laps-list li {
+	border-bottom: 1px solid #f1f1f1;
+	font-size: 1.15rem;
+	padding: 0.45rem 0.5rem;
+}
+
+.race-laps-list .is-fastest-lap {
+	background: #fff8d6;
+	font-weight: 700;
+}
+
+.race-lane-winner {
+	border-color: hsl(48, 100%, 50%);
+	box-shadow: 0 0 0 3px rgba(255, 221, 87, 0.35), 0 0.75em 1.5em -0.25em rgba(10, 10, 10, 0.2);
+}
+
+.race-lane-winner .race-result {
+	background: hsl(48, 100%, 67%);
+	color: hsl(0, 0%, 21%);
+}
+
+.race-lane-winner .race-result-icon,
+.race-lane-dnf .race-result-icon {
+	display: inline-flex;
+}
+
+.race-lane-dnf {
+	align-self: flex-start;
+	border-color: transparent;
+	box-shadow: 0 0.5em 1em -0.125em rgba(10, 10, 10, 0.06);
+}
+
+.race-lane-dnf .race-result,
+.race-lane-dnf .js-timer {
+	color: hsl(0, 0%, 48%);
+}
+
+.race-lane-dnf .race-result-icon {
+	color: hsl(0, 0%, 48%);
+}
+
+.race-lane-dnf .race-gap {
+	display: none;
+}
+
+.race-lane-dnf .js-invalidate {
+	display: none !important;
+}
+
+div[data-tab="race"].container {
+	margin-bottom: 0;
+}
+
+.race-next-round .tag {
+	min-height: 3.25em;
+}
+
+.race-next-round-player {
+	color: #fff;
+	font-weight: 700;
+	font-size: 1.25rem !important;
+	text-transform: uppercase;
+	margin: 0px 6px;
 }
 
 @media print {
@@ -40,6 +648,26 @@
 
 	table.is-table-print tr.is-selected td {
 		border-color: #dbdbdb;
+	}
+
+	.leaderboard-card {
+		border: 0;
+		box-shadow: none;
+		overflow: visible;
+	}
+
+	.leaderboard-table-container {
+		max-height: none;
+		overflow: visible;
+	}
+
+	.racers-table thead th {
+		position: static;
+	}
+
+	.racers-rank-badge {
+		background: none !important;
+		color: inherit !important;
 	}
 
 	.is-race-best {

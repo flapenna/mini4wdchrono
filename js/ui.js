@@ -1,31 +1,91 @@
 'use strict';
 
-const serialport = require('serialport');
 const strftime = require('strftime');
 const utils = require('./utils');
 const i18n = new (require('../i18n/i18n'))();
 const configuration = require('./configuration');
-configuration.init();
 const storage = require('./storage');
+const log = require('./logger');
+const companionAuth = require('./companion_auth');
+const companionApi = require('./companion_api');
 
+// Races returned by the last Companion "today" lookup, indexed by race id.
+let companionRaces = [];
+
+// Whether the user closed the Companion invite. Deliberately not persisted:
+// the invite comes back on the next launch if they are still logged out.
+let companionBannerDismissed = false;
+
+// Opens a modal and prevents page scrolling.
+const openModal = (modal) => {
+    $(`#${modal}`).addClass('is-active');
+    $(document.documentElement).addClass('is-clipped');
+};
+
+// Closes every modal and restores page scrolling.
+const closeAllModals = () => {
+    $('.modal').removeClass('is-active');
+    $(document.documentElement).removeClass('is-clipped');
+};
+
+// Updates the board status UI after a successful connection.
 const boardConnected = () => {
     $('#tag-board-status').removeClass('is-danger');
     $('#tag-board-status').addClass('is-success');
+    $('#tag-board-status').data('tn', 'tag-connected');
     $('#tag-board-status').text(i18n.__('tag-connected'));
+    $('#hardware-loading').hide();
+    closeAllModals();
+    $('#main').show();
 };
 
-const boardDisonnected = () => {
-    $('#tag-board-status').removeClass('is-success');
+// Shows the application without a hardware connection in debug mode.
+const debugModeEnabled = () => {
+    $('#tag-board-status').removeClass('is-danger is-success');
+    $('#tag-board-status').addClass('is-warning');
+    $('#tag-board-status').data('tn', 'tag-debug-mode');
+    $('#tag-board-status').text(i18n.__('tag-debug-mode'));
+    $('#hardware-loading').hide();
+    $('#main').show();
+};
+
+// Updates the board status UI after a disconnection.
+const boardDisconnected = () => {
+    $('#tag-board-status').removeClass('is-success is-warning');
     $('#tag-board-status').addClass('is-danger');
+    $('#tag-board-status').data('tn', 'tag-disconnected');
     $('#tag-board-status').text(i18n.__('tag-disconnected'));
+    $('#main').hide();
+    $('#hardware-loading').show();
 };
 
+// Shows a hardware initialization error without Electron's IPC wrapper.
+const showBootConnectionError = (errorMessage) => {
+    if (!errorMessage) {
+        $('#hardware-port-selection-error').hide();
+        return;
+    }
+
+    const message = errorMessage.replace(/^Error invoking remote method 'hardware-initialize': /, '');
+    $('#hardware-port-selection-error').text(message).show();
+};
+
+// Shows the USB port selector when the first hardware connection cannot be made.
+const showBootPortSelection = (errorMessage) => {
+    $('#hardware-loading > .loader, #hardware-loading > p').hide();
+    showBootConnectionError(errorMessage);
+    $('#js-config-usb-port-field').appendTo('#hardware-port-selection-content');
+    openModal('modal-hardware-connection-error');
+};
+
+// Translates all elements marked for localization.
 const translate = () => {
     $('.tn').each(function () {
         $(this).html(i18n.__($(this).data('tn')));
     });
 };
 
+// Activates the requested application tab.
 const gotoTab = (tab) => {
     $('.tabs li').removeClass('is-active');
     $(`li[data-tab=${tab}]`).addClass('is-active');
@@ -34,29 +94,31 @@ const gotoTab = (tab) => {
     $(`div[data-tab=${tab}]`).show();
 };
 
+// Initializes UI controls from cached configuration and race data.
 const init = () => {
-    const title_text = _.compact([configuration.get('title'), storage.get('name')]).join(' - ');
+    translate();
+
+    const title_text = [configuration.get('title'), storage.get('name')]
+        .filter((value) => value !== null && value !== undefined && value !== '')
+        .join(' - ');
     $('#js-title').text(title_text);
 
     $('#js-race-name').text(storage.get('name') || i18n.__('label-untitled'));
     $('#js-race-created').text(`${i18n.__('label-created')} ${strftime('%Y-%m-%d, %H:%M', new Date(storage.get('created') * 1000))}`);
-    $('#js-settings-time-threshold').val(storage.get('timeThreshold'));
-    $('#js-settings-speed-threshold').val(storage.get('speedThreshold'));
-    $('#js-settings-start-delay').val(storage.get('startDelay'));
-    $('#js-settings-round-laps').val(storage.get('roundLaps'));
+    $('#js-settings-time-threshold').val(storage.get('timeThreshold') || 40);
+    $('#js-settings-speed-threshold').val(storage.get('speedThreshold') || 5);
+    $('#js-settings-start-delay').val(storage.get('startDelay') || 3);
+    $('#js-settings-round-laps').val(storage.get('roundLaps') || 3);
+    $('#js-racer-search').attr({'placeholder': i18n.__('button-search-racers')});
     showRaceModeDetails();
 
     $('.js-led-animation').removeClass('is-primary');
     $(`#js-led-animation-${configuration.get('ledAnimation')}`).addClass('is-primary');
-    $('.js-led-type').removeClass('is-primary');
-    $(`#js-led-type-${configuration.get('ledType')}`).addClass('is-primary');
     $('#js-config-reverse').prop('checked', configuration.get('reverse') > 0);
     $('#js-config-sensor-pin-1').val(configuration.get('sensorPin1'));
     $('#js-config-sensor-pin-2').val(configuration.get('sensorPin2'));
     $('#js-config-sensor-pin-3').val(configuration.get('sensorPin3'));
     $('#js-config-led-pin-1').val(configuration.get('ledPin1'));
-    $('#js-config-led-pin-2').val(configuration.get('ledPin2'));
-    $('#js-config-led-pin-3').val(configuration.get('ledPin3'));
     $('#js-config-piezo-pin').val(configuration.get('piezoPin'));
     $('#js-config-start-button-pin').val(configuration.get('startButtonPin'));
     $('#js-config-title').val(configuration.get('title'));
@@ -75,24 +137,76 @@ const init = () => {
     $('#tag-tournament-status').addClass('is-danger');
     $('#tag-tournament-status').removeClass('is-success');
     $('#tag-tournament-status').text(i18n.__('tag-not-loaded'));
+    updateRaceStatus();
 
     disableRaceInput(false);
     if (storage.get('race')) {
         disableRaceInput(true);
     }
 
-    serialport.list().then(ports => {
+    window.electronAPI.hardwareListPorts().then(ports => {
         ports.forEach(function (port) {
             $('#js-config-usb-port').append($('<option>', {
                 value: port.path,
                 text: port.manufacturer ? `${port.path} (${port.manufacturer})` : port.path
             }));
-            console.log(port.path);
         });
         $('#js-config-usb-port').val(configuration.get('usbPort'));
     });
 };
 
+// Counts all rounds that have already recorded a result.
+const completedRoundCount = (mancheList) => {
+    return mancheList.reduce((total, manche, mindex) => {
+        return total + manche.reduce((roundTotal, _round, rindex) => {
+            return roundTotal + (storage.loadRound(mindex, rindex) ? 1 : 0);
+        }, 0);
+    }, 0);
+};
+
+// Finds the best valid round time using the same data as the ranking table.
+const findBestLap = () => {
+    const tournament = storage.get('tournament');
+    if (!tournament) return null;
+
+    let bestLap = null;
+    const times = storage.getSortedPlayerList();
+    times.forEach((info) => {
+        info.times.forEach((time) => {
+            if (time > 0 && time < 99999 && (!bestLap || time < bestLap.time)) {
+                bestLap = { time: time, playerId: info.id };
+            }
+        });
+    });
+
+    return bestLap;
+};
+
+// Updates the persistent tournament progress and best-lap badges.
+const updateRaceStatus = () => {
+    const tournament = storage.get('tournament');
+    if (!tournament) {
+        $('#race-status-badges').hide();
+        return;
+    }
+
+    const mancheList = storage.getManches() || [];
+    const totalRounds = mancheList.reduce((total, manche) => { return total + manche.length; }, 0);
+    const completedRounds = completedRoundCount(mancheList);
+    if (!completedRounds) {
+        $('#race-status-badges').hide();
+        return;
+    }
+
+    const progress = totalRounds ? Math.round(completedRounds / totalRounds * 100) : 0;
+    const bestLap = findBestLap();
+
+    $('#race-status-badges').show();
+    $('#tag-race-progress').text(`${completedRounds} / ${totalRounds} (${progress}%)`);
+    $('#tag-best-lap').text(bestLap ? `${utils.prettyTime(bestLap.time)} · ${tournament.players[bestLap.playerId] || '//'}` : '-');
+};
+
+// Prepares the contents of the requested modal.
 const initModal = (modalId) => {
     if (modalId === 'modal-new') {
         $('#modal-new-name').val('');
@@ -102,8 +216,9 @@ const initModal = (modalId) => {
         $('#modal-open-files').empty();
         const data = storage.getRecentFiles(50);
         if (data.length) {
+            const currentRaceFile = configuration.get('raceFile');
             data.forEach((race) => {
-                if (race.filename === configuration.get('raceFile')) {
+                if (race.filename === currentRaceFile) {
                     $('#modal-open-files').append(`
 					<tr>
 						<td style="width:165px;">${strftime('%Y-%m-%d, %H:%M', new Date(race.created * 1000))}</td>
@@ -127,6 +242,7 @@ const initModal = (modalId) => {
     }
 };
 
+// Updates the free-round toggle and dependent UI state.
 const toggleFreeRound = (freeRound) => {
     if (freeRound) {
         $('#button-toggle-free-round').text(i18n.__('button-goto-race'));
@@ -138,6 +254,7 @@ const toggleFreeRound = (freeRound) => {
     $('#button-toggle-free-round').trigger('blur');
 };
 
+// Shows a successfully loaded track in the UI.
 const trackLoadDone = (track) => {
     $('#js-input-track-code').removeClass('is-danger');
     $('#tag-track-status').removeClass('is-danger');
@@ -145,6 +262,7 @@ const trackLoadDone = (track) => {
     $('#tag-track-status').text(track.code);
 };
 
+// Shows a failed track-load state in the UI.
 const trackLoadFail = () => {
     $('#js-input-track-code').addClass('is-danger');
     $('#tag-track-status').addClass('is-danger');
@@ -152,6 +270,7 @@ const trackLoadFail = () => {
     $('#tag-track-status').text(i18n.__('tag-not-loaded'));
 };
 
+// Shows a successfully loaded tournament in the UI.
 const tournamentLoadDone = (tournament) => {
     $('#button-toggle-free-round').show();
     $('#tag-tournament-status').removeClass('is-danger');
@@ -161,6 +280,7 @@ const tournamentLoadDone = (tournament) => {
     $('#js-input-tournament-code').val(tournament.code);
 };
 
+// Shows a failed tournament-load state in the UI.
 const tournamentLoadFail = () => {
     $('#js-input-tournament-code').addClass('is-danger');
     $('#tag-tournament-status').addClass('is-danger');
@@ -168,22 +288,26 @@ const tournamentLoadFail = () => {
     $('#tag-tournament-status').text(i18n.__('tag-not-loaded'));
 };
 
+// Updates UI controls for a race that has started.
 const raceStarted = (freeRound) => {
     updateUiState(freeRound);
     $('.js-show-on-race-running').show();
     $('.js-hide-on-race-running').hide();
 };
 
+// Updates UI controls after a race finishes.
 const raceFinished = (freeRound) => {
-    updateUiState(freeRound);
     $('.js-show-on-race-running').hide();
     $('.js-hide-on-race-running').show();
+    updateUiState(freeRound);
     const tournament = storage.get('tournament');
     if (tournament) {
         disableRaceInput(true);
     }
+    updateRaceStatus();
 };
 
+// Renders the selected track's details.
 const showTrackDetails = (track) => {
     if (track) {
         if (track.manual) {
@@ -210,6 +334,7 @@ const showTrackDetails = (track) => {
     }
 };
 
+// Renders the selected tournament's details.
 const showTournamentDetails = (tournament) => {
     if (tournament) {
         $('#js-input-tournament-code').val(tournament.url);
@@ -224,6 +349,7 @@ const showTournamentDetails = (tournament) => {
     }
 };
 
+// Calculates and renders race-time threshold estimates.
 const showThresholds = (timeThreshold, speedThreshold, roundLaps) => {
     const track = storage.get('track');
     if (track) {
@@ -258,6 +384,7 @@ const showThresholds = (timeThreshold, speedThreshold, roundLaps) => {
     }
 };
 
+// Renders the selected race mode and its description.
 const showRaceModeDetails = () => {
     const race_mode = storage.get('raceMode');
     $('.js-race-mode').removeClass('is-primary');
@@ -275,56 +402,81 @@ const showRaceModeDetails = () => {
     }
 };
 
+// Filters the ranking table rows by the current racer search text.
+const filterPlayerList = () => {
+    const query = $('#js-racer-search').val().trim().toLocaleLowerCase();
+    $('#tablePlayerList tbody tr').each((_index, row) => {
+        const racerName = $(row).find('.racers-name').text().toLocaleLowerCase();
+        $(row).toggle(racerName.includes(query));
+    });
+};
+
+// Renders the tournament ranking table.
 const showPlayerList = () => {
     const track = storage.get('track');
     const tournament = storage.get('tournament');
-    const playerList = tournament.players;
     if (!track) return;
     if (!tournament) return;
 
-    $('#tablePlayerList').empty();
+    const playerList = tournament.players;
+    const racerLabel = playerList.length === 1 ? i18n.__('label-racer') : i18n.__('label-racers');
+    $('#js-racers-count').text(`${playerList.length} ${racerLabel}`);
+    let tableHtml = '';
     if (playerList.length > 0) {
         const times = storage.getSortedPlayerList();
-        const raceBestTime = _.min(_.flatten(_.map(times, (info) => { return _.filter(info.times, (t) => { return t > 0 && t < 99999; }); })));
+        const validRaceTimes = times.flatMap((info) => { return info.times.filter((t) => { return t > 0 && t < 99999; }); });
+        const raceBestTime = validRaceTimes.length > 0 ? Math.min(...validRaceTimes) : null;
 
         // draw title row
-        const titleCells = _.times(tournament.manches.length, (i) => {
-            return `<td class="has-text-centered">Manche ${i + 1}</td>`;
+        const titleCells = Array.from({ length: tournament.manches.length }, (_value, i) => {
+            return `<th scope="col" class="has-text-centered racers-time-column">M${i + 1}</th>`;
         });
-        titleCells.push(`<td class="has-text-centered">${i18n.__('label-best-2-times')}</td>`);
-        titleCells.push(`<td class="has-text-centered">${i18n.__('label-best-speed')}</td>`);
-        titleCells.push(`<td class="has-text-centered">${i18n.__('label-best-speed-km')}</td>`);
-        $('#tablePlayerList').append(`<tr class="is-selected"><td colspan="2"><strong>${playerList.length} RACERS</strong></td>${titleCells}</tr>`);
+        titleCells.push(`<th scope="col" class="has-text-centered racers-summary-column"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-stopwatch"></i></span> ${i18n.__('label-best-2-times')}</th>`);
+        titleCells.push(`<th scope="col" class="has-text-centered racers-speed-column"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-gauge-high"></i></span> ${i18n.__('label-best-speed')}</th>`);
+        tableHtml = `<thead><tr><th scope="col" class="has-text-centered racers-rank-column"><span class="icon" aria-hidden="true"><i class="fa-solid fa-ranking-star"></i></span><span class="is-sr-only">${i18n.__('label-rank')}</span></th><th scope="col" class="racers-name-column"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-user"></i></span> ${i18n.__('label-racer')}</th>${titleCells.join('')}</tr></thead><tbody>`;
 
         // draw player rows
-        _.each(times, (info, pos) => {
-            const bestTime = _.min(_.filter(info.times, (t) => { return t > 0 && t < 99999; }));
-            const bestSpeed = track.length / (bestTime / 1000);
+        times.forEach((info, pos) => {
+            const validPlayerTimes = info.times.filter((t) => { return t > 0 && t < 99999; });
+            const bestTime = validPlayerTimes.length > 0 ? Math.min(...validPlayerTimes) : null;
+            const bestSpeed = bestTime ? track.length / (bestTime / 1000) : null;
             const cells = [];
-            cells.push(`<td class="has-text-centered"><span class="tag is-large ${_.contains([0, 1, 2], pos) ? 'is-warning' : _.contains([3, 4, 5], pos) ? 'is-success' : ''}">${pos + 1}</span></td>`);
-            cells.push(`<td><p class="is-uppercase">${playerList[info.id]}</p></td>`);
-            cells.push(_.times(tournament.manches.length, (i) => {
+            const rankClass = pos < 3 ? ` is-podium is-podium-${pos + 1}` : '';
+            const rankIcon = pos === 0 ? 'fa-trophy' : 'fa-medal';
+            const podiumIcon = pos < 3 ? `<i class="fa-solid ${rankIcon}" aria-hidden="true"></i>` : '';
+            cells.push(`<td class="has-text-centered racers-rank"><span class="racers-rank-badge${rankClass}">${podiumIcon}<span>${pos + 1}</span></span></td>`);
+            cells.push(`<th scope="row" class="racers-name is-uppercase">${utils.escapeHtml(playerList[info.id])}</th>`);
+            cells.push(Array.from({ length: tournament.manches.length }, (_value, i) => {
                 const playerTime = info.times[i] || 0;
                 let highlight = '';
+                let timeContent = utils.prettyTime(playerTime);
                 if (playerTime === 0 || playerTime === 99999) {
                     highlight = 'has-text-grey-light is-out';
+                    timeContent = playerTime === 99999 ? `<span class="is-light">${timeContent}</span>` : '<span aria-hidden="true">&mdash;</span>';
                 }
                 else if (playerTime === raceBestTime) {
-                    highlight = 'has-background-danger has-text-white is-race-best';
+                    highlight = 'is-race-best';
+                    timeContent = `<span class="icon is-small" title="${i18n.__('label-race-best')}" aria-hidden="true"><i class="fa-solid fa-trophy"></i></span> ${timeContent}`;
                 }
                 else if (playerTime === bestTime) {
-                    highlight = 'has-text-danger is-player-best';
+                    highlight = 'is-player-best';
+                    timeContent = `<span class="icon is-small" title="${i18n.__('label-personal-best')}" aria-hidden="true"><i class="fa-solid fa-star"></i></span> ${timeContent}`;
                 }
-                return `<td class="has-text-centered ${highlight}">${utils.prettyTime(playerTime)}</td>`;
+                return `<td class="has-text-centered racers-time ${highlight}">${timeContent}</td>`;
             }));
-            cells.push(`<td class="has-text-centered">${utils.prettyTime(info.best)}</td>`);
-            cells.push(`<td class="has-text-centered">${bestSpeed.toFixed(2)}</td>`);
-            cells.push(`<td class="has-text-centered">${(bestSpeed * 3.6).toFixed(2)}</td>`);
-            $('#tablePlayerList').append(`<tr>${cells}</tr>`);
+            const bestSum = validPlayerTimes.length >= 2 ? utils.prettyTime(info.best) : '<span aria-hidden="true">&mdash;</span>';
+            const speed = bestSpeed ? `<strong>${bestSpeed.toFixed(2)} m/s</strong><span>${(bestSpeed * 3.6).toFixed(2)} km/h</span>` : '<span aria-hidden="true">&mdash;</span>';
+            cells.push(`<td class="has-text-centered racers-time racers-best-sum">${bestSum}</td>`);
+            cells.push(`<td class="has-text-centered racers-speed">${speed}</td>`);
+            tableHtml += `<tr>${cells.join('')}</tr>`;
         });
+        tableHtml += '</tbody>';
     }
+    $('#tablePlayerList').html(tableHtml);
+    filterPlayerList();
 };
 
+// Renders every tournament round and its recorded results.
 const showMancheList = () => {
     const track = storage.get('track');
     const tournament = storage.get('tournament');
@@ -336,75 +488,74 @@ const showMancheList = () => {
     const playerList = tournament.players;
     const mancheList = storage.getManches();
 
-    $('#tableMancheList').empty();
-    let cars, mancheText, playerName, playerTime, playerPosition, playerOut, playerNameTag, playerPositionTag, playerHeader, playerForm, highlight, isCurrentRound, gotoButton;
-    _.each(mancheList, (manche, mindex) => {
-        $('#tableMancheList').append(`<tr class="is-selected"><td><strong>${mancheName(mindex)}</strong></td><td>Lane 1</td><td>Lane 2</td><td>Lane 3</td></tr>`);
-        _.each(manche, (group, rindex) => {
-            cars = storage.loadRound(mindex, rindex);
-            mancheText = _.map(group, (id, pindex) => {
+    const roundCount = mancheList.reduce((count, manche) => { return count + manche.length; }, 0);
+    const roundLabel = roundCount === 1 ? i18n.__('label-round') : i18n.__('label-rounds');
+    $('#js-rounds-count').text(`${roundCount} ${roundLabel}`);
 
-                playerName = playerList[id];
+    let tableHtml = `<thead><tr><th scope="col" class="has-text-centered manches-round-column"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-flag-checkered"></i></span>${i18n.__('label-round')}</th><th scope="col" class="has-text-centered"><span class="manches-lane-dot manches-lane-dot-1" aria-hidden="true"></span>${i18n.__('label-lane-1')}</th><th scope="col" class="has-text-centered"><span class="manches-lane-dot manches-lane-dot-2" aria-hidden="true"></span>${i18n.__('label-lane-2')}</th><th scope="col" class="has-text-centered"><span class="manches-lane-dot manches-lane-dot-3" aria-hidden="true"></span>${i18n.__('label-lane-3')}</th></tr></thead>`;
+    mancheList.forEach((manche, mindex) => {
+        tableHtml += `<tbody class="manches-group"><tr class="manches-section"><th colspan="4" scope="rowgroup"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-flag"></i></span> ${utils.escapeHtml(mancheName(mindex))}</th></tr>`;
+        manche.forEach((group, rindex) => {
+            const cars = storage.loadRound(mindex, rindex);
+            const mancheText = group.map((id, pindex) => {
+                const playerName = playerList[id];
                 if (playerName) {
-                    if (cars) {
-                        playerTime = cars[pindex].currTime;
-                        playerPosition = cars[pindex].position;
-                        playerOut = cars[pindex].outOfBounds;
-                    }
-                    else {
-                        playerTime = 0;
-                        playerPosition = null;
-                        playerOut = false;
-                    }
+                    const car = cars ? cars[pindex] : null;
+                    const playerTime = car ? car.currTime : 0;
+                    const playerPosition = car ? car.position : null;
+                    const playerOut = car ? car.outOfBounds : false;
+                    let playerPositionTag = '';
 
-                    playerNameTag = `<span class="tag is-large is-uppercase">${playerList[id] || ''}</span>`;
-                    playerPositionTag = '';
-
-                    if (playerPosition !== null) {
-                        if (cars[pindex].originalTime !== null) {
-                            playerPositionTag = '<span class="tag is-danger is-large">mod</span>';
+                    if (playerPosition !== null && playerPosition !== undefined) {
+                        if (car.originalTime) {
+                            playerPositionTag = `<span class="tag is-danger is-light"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-pen"></i></span><span>${i18n.__('label-modified')}</span></span>`;
                         }
                         else if (playerOut) {
-                            playerPositionTag = '<span class="tag is-dark is-large">out</span>';
+                            playerPositionTag = `<span class="tag is-dark"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-ban"></i></span><span>${i18n.__('label-car-out')}</span></span>`;
                         }
                         else if (playerPosition === 1) {
-                            playerPositionTag = `<span class="tag is-warning is-large">${playerPosition}</span>`;
+                            playerPositionTag = `<span class="tag is-warning"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-trophy"></i></span><span>${playerPosition}</span></span>`;
                         }
                         else {
-                            playerPositionTag = `<span class="tag is-large">${playerPosition}</span>`;
+                            playerPositionTag = `<span class="tag is-light"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-medal"></i></span><span>${playerPosition}</span></span>`;
                         }
                     }
 
-                    playerHeader = `<div style="display: flex; justify-content: center; margin-bottom: 5px;"><div class="tags has-addons">${playerNameTag}${playerPositionTag}</div></div>`;
-                    playerForm = `<div class="field"><div class="control"><input class="input is-large js-time-form" type="text" data-manche="${mindex}" data-round="${rindex}" data-player="${pindex}" value="${utils.prettyTime(playerTime)}" /></div></div>`;
+                    const playerHeader = `<div class="manches-racer-header"><strong class="is-uppercase">${utils.escapeHtml(playerName)}</strong>${playerPositionTag}</div>`;
+                    const playerForm = `<div class="field mb-0 manches-time-field"><div class="control has-icons-left"><input class="input is-medium has-text-centered js-time-form" type="text" aria-label="${utils.escapeHtml(playerName)}" data-manche="${mindex}" data-round="${rindex}" data-player="${pindex}" value="${utils.prettyTime(playerTime)}" /><span class="icon is-small is-left has-text-grey-light" aria-hidden="true"><i class="fa-solid fa-stopwatch"></i></span></div></div>`;
 
-                    return `<td>${playerHeader}${playerForm}</td>`;
+                    return `<td class="manches-lane-cell">${playerHeader}${playerForm}</td>`;
                 }
                 else {
-                    return '<td></td>';
+                    return '<td class="manches-lane-cell is-empty"><span aria-hidden="true">&mdash;</span></td>';
                 }
-            }).join();
-            isCurrentRound = (mindex === currManche && rindex === currRound);
-            highlight = isCurrentRound ? 'class="is-highlighted"' : '';
-            gotoButton = isCurrentRound ? '' : `<button class="button is-small is-info is-light js-goto-round tn" data-tn="button-goto-round" data-manche="${mindex}" data-round="${rindex}">&lt; play this</button>`;
-            $('#tableMancheList').append(`<tr ${highlight}><td class="has-text-centered">Round ${mindex + 1}-${rindex + 1}<br />${gotoButton}</td>${mancheText}</tr>`);
+            }).join('');
+            const isCurrentRound = (mindex === currManche && rindex === currRound);
+            const rowClass = isCurrentRound ? ' class="is-current-round"' : '';
+            const roundAction = isCurrentRound ? `<span class="tag is-info is-light"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-circle-play"></i></span><span>${i18n.__('label-current-round')}</span></span>` : `<button class="button is-small is-info is-light js-goto-round" data-manche="${mindex}" data-round="${rindex}"><span class="icon is-small" aria-hidden="true"><i class="fa-solid fa-play"></i></span><span>${i18n.__('button-goto-round')}</span></button>`;
+            tableHtml += `<tr${rowClass}><th scope="row" class="has-text-centered manches-round"><strong>${i18n.__('label-round')} ${mindex + 1}-${rindex + 1}</strong>${roundAction}</th>${mancheText}</tr>`;
         });
+        tableHtml += '</tbody>';
     });
-    translate();
+    $('#tableMancheList').html(tableHtml);
 };
 
+// Displays the players scheduled for the next round.
 const showNextRoundNames = () => {
     const currManche = storage.get('currManche');
     const currRound = storage.get('currRound');
     const tournament = storage.get('tournament');
     const mancheList = storage.getManches();
 
+    // A race saved before its tournament was loaded, or one whose manche index
+    // no longer exists, leaves nothing to announce.
     if (!tournament || !mancheList || !mancheList[currManche]) {
         $('#next-round-names').text('');
         return;
     }
 
     const playerList = tournament.players;
+
     let r = currRound, m = currManche, names;
     let label = i18n.__('label-next-round');
     r += 1;
@@ -418,12 +569,16 @@ const showNextRoundNames = () => {
         names = ['-'];
     }
     else {
-        names = _.filter([playerList[mancheList[m][r][0]], playerList[mancheList[m][r][1]], playerList[mancheList[m][r][2]]], (n) => { return n; });
+        names = [playerList[mancheList[m][r][0]], playerList[mancheList[m][r][1]], playerList[mancheList[m][r][2]]].filter((n) => { return n; });
     }
 
-    $('#next-round-names').text(`${label} ${names.join(', ').toUpperCase()}`);
+    const namesHtml = names.map((name) => {
+        return `<strong class="race-next-round-player">${utils.escapeHtml(name)}</strong>`;
+    }).join(' - ');
+    $('#next-round-names').html(`${label} ${namesHtml}`);
 };
 
+// Returns the display name for a manche or final.
 const mancheName = (mindex) => {
     const tournament = storage.get('tournament');
     const mancheList = storage.getManches();
@@ -439,6 +594,7 @@ const mancheName = (mindex) => {
     }
 };
 
+// Initializes the race screen for the current round.
 const initRace = (freeRound) => {
     const tournament = storage.get('tournament');
     const currManche = storage.get('currManche');
@@ -447,52 +603,62 @@ const initRace = (freeRound) => {
     updateUiState(freeRound);
     $('.js-show-on-race-running').hide();
 
-    if (tournament == null) { // eslint-disable-line eqeqeq -- electron-settings returns undefined for missing keys
+    if (!tournament || freeRound) {
         $('#name-lane0').text(' ');
         $('#name-lane1').text(' ');
         $('#name-lane2').text(' ');
-        $('#curr-manche').text('0');
-        $('#curr-round').text('0');
-    }
-    else if (freeRound) {
-        $('#name-lane0').text(' ');
-        $('#name-lane1').text(' ');
-        $('#name-lane2').text(' ');
+        $('#curr-manche').text('');
+        $('#curr-round').text('');
+        $('#next-round-names').text('-');
     }
     else {
         const playerList = tournament.players;
         const mancheList = storage.getManches();
-        const round = mancheList && mancheList[currManche] && mancheList[currManche][currRound];
-        if (round) {
-            $('#name-lane0').text(playerList[round[0]] || '//');
-            $('#name-lane1').text(playerList[round[1]] || '//');
-            $('#name-lane2').text(playerList[round[2]] || '//');
-        } else {
-            $('#name-lane0').text('//');
-            $('#name-lane1').text('//');
-            $('#name-lane2').text('//');
-        }
+        // The stored round can point outside the tournament after it is
+        // reloaded with fewer manches, or when finals have been regenerated.
+        const round = (mancheList && mancheList[currManche] && mancheList[currManche][currRound]) || [];
+        [0, 1, 2].forEach((lane) => {
+            const playerId = round[lane];
+            if (playerId === undefined) {
+                $(`#name-lane${lane}`).text('//');
+                return;
+            }
+            const playerName = playerId === -1 ? i18n.__('label-car-empty') : playerList[playerId] || '//';
+            $(`#name-lane${lane}`).text(playerName);
+        });
         $('#curr-manche').text(mancheName(currManche));
         $('#curr-round').text(`ROUND ${currRound + 1}`);
         showNextRoundNames();
         showPlayerList();
         showMancheList();
     }
+    updateRaceStatus();
 };
 
+// Renders lane positions, laps, split times, and timers.
 const drawRace = (cars, running) => {
     $('.js-place').removeClass('is-dark is-light is-primary is-warning');
     $('.js-delay').removeClass('is-danger');
     $('.js-timer').removeClass('is-danger is-success');
+    $('.race-lane-card').removeClass('race-lane-winner race-lane-dnf');
+    $('.race-result-icon').empty();
 
     const track = storage.get('track');
     const laps = storage.get('roundLaps');
+    updateRaceStatus();
 
-    _.each(cars, (car, i) => {
-    // delay + speed
+    cars.forEach((car, i) => {
+        const isEmpty = car.playerId === -1;
+        $(`.race-lane-card-${i}`).toggleClass('race-lane-empty', isEmpty);
+
+        if (isEmpty) {
+            $(`#name-lane${i}`).text(i18n.__('label-car-empty'));
+            return;
+        }
+
+        // delay + speed
         if (car.outOfBounds) {
-            $(`#delay-lane${i}`).text('+99.999');
-            // $(`#speed-lane${i}`).text('0.00 m/s');
+            $(`#delay-lane${i}`).text('—');
         }
         else {
             $(`#delay-lane${i}`).text(`+${utils.prettyTime(car.delayFromFirst)}`);
@@ -517,16 +683,19 @@ const drawRace = (cars, running) => {
 
         // split times
         $(`#laps-lane${i}`).empty();
-        _.each(car.splitTimes, (t, ii) => {
+        const fastestLap = Math.min(...car.splitTimes);
+        car.splitTimes.forEach((t, ii) => {
             const time = utils.prettyTime(t);
             const speed = (track.length / 3) / (t / 1000);
-            $(`#laps-lane${i}`).append(`<li class="is-size-5">${i18n.__('label-car-lap')} ${ii + 1} - <strong>${time}s</strong> - ${speed.toFixed(2)}m/s</li>`);
+            const fastestClass = t === fastestLap ? 'is-fastest-lap' : '';
+            $(`#laps-lane${i}`).append(`<li class="${fastestClass}"><span>${i18n.__('label-car-lap')} ${ii + 1}</span><strong>${time}s</strong><span>${speed.toFixed(2)} m/s</span></li>`);
         });
 
         // place
         if (car.outOfBounds) {
-            $(`#place-lane${i}`).text(i18n.__('label-car-out'));
-            $(`#place-lane${i}`).addClass('is-dark');
+            $(`#place-lane${i}`).text(i18n.__('label-car-dnf'));
+            $(`#result-icon-lane${i}`).html('<i class="fa-solid fa-ban"></i>');
+            $(`.race-lane-card-${i}`).addClass('race-lane-dnf');
         }
         else if (car.lapCount === 0) {
             if (running) {
@@ -542,8 +711,13 @@ const drawRace = (cars, running) => {
             $(`#place-lane${i}`).addClass('is-light');
         }
         else {
-            $(`#place-lane${i}`).text(`${car.position} ${i18n.__('label-car-position')}`);
-            if (car.position === 1) {
+            const isWinner = !running && car.lapCount > laps && car.position === 1;
+            $(`#place-lane${i}`).text(isWinner ? i18n.__('label-car-winner') : `${car.position} ${i18n.__('label-car-position')}`);
+            if (isWinner) {
+                $(`#result-icon-lane${i}`).html('<i class="fa-solid fa-trophy"></i>');
+                $(`.race-lane-card-${i}`).addClass('race-lane-winner');
+            }
+            else if (car.position === 1) {
                 $(`#place-lane${i}`).addClass('is-warning');
             }
             else {
@@ -553,7 +727,6 @@ const drawRace = (cars, running) => {
 
         // timer
         if (car.outOfBounds) {
-            $(`#timer-lane${i}`).addClass('is-danger');
             $(`#timer-lane${i}`).text(utils.prettyTime(car.currTime));
         }
         else if (car.lapCount === 0) {
@@ -571,6 +744,7 @@ const drawRace = (cars, running) => {
     });
 };
 
+// Enables or disables controls that change race setup.
 const disableRaceInput = (disabled) => {
     $('#js-input-tournament-code').prop('disabled', disabled);
     $('#js-load-tournament').prop('disabled', disabled);
@@ -582,6 +756,7 @@ const disableRaceInput = (disabled) => {
     $('#js-settings-round-laps').prop('disabled', disabled);
 };
 
+// Updates visibility for the loaded track, tournament, and race mode.
 const updateUiState = (freeRound) => {
     const track = storage.get('track');
     const tournament = storage.get('tournament');
@@ -616,68 +791,504 @@ const updateUiState = (freeRound) => {
     }
 };
 
-// Companion login state UI
+// ==========================================================================
+// ==== Mini4WD Companion
 
-const showLoggedIn = (user) => {
-    const displayName = user.display_name || user.first_name || user.name || user.email;
-    $('#tag-companion-status').removeClass('is-danger');
-    $('#tag-companion-status').addClass('is-success');
-    $('#tag-companion-status').text(displayName);
-    $('#js-companion-race-section').show();
-};
-
-const showLoggedOut = () => {
-    $('#tag-companion-status').removeClass('is-success');
-    $('#tag-companion-status').addClass('is-danger');
-    $('#tag-companion-status').text(i18n.__('tag-not-connected'));
-    $('#js-companion-race-section').hide();
-    $('#js-companion-race-select').empty();
-    $('#js-companion-category-select').empty();
-};
-
-const populateRaceSelect = (races) => {
-    const $select = $('#js-companion-race-select');
-    $select.empty();
-    $select.append($('<option>', { value: '', text: '-- ' + i18n.__('label-select-race') + ' --' }));
-    if (!races || races.length === 0) {
-        $select.append($('<option>', { value: '', text: i18n.__('label-no-races'), disabled: true }));
-        return;
-    }
-    races.forEach(function (race) {
-        $select.append($('<option>', {
-            value: race.id,
-            text: race.name + ' (' + race.participant_count + ' ' + i18n.__('label-tournament-players').toLowerCase() + ')'
-        }));
-    });
-    // Clear category select
-    $('#js-companion-category-select').empty();
-};
-
+// Fills the category dropdown for the selected Companion race.
 const populateCategorySelect = (categories) => {
     const $select = $('#js-companion-category-select');
     $select.empty();
-    $select.append($('<option>', { value: '', text: '-- ' + i18n.__('label-select-category') + ' --' }));
-    if (!categories || categories.length === 0) {
-        return;
-    }
-    categories.forEach(function (cat) {
-        const catName = cat.category ? cat.category.name : 'Category';
-        const hasCode = cat.external_tournament_code ? '' : ' (' + i18n.__('label-no-tournament-code') + ')';
+    $select.append($('<option>', { value: '', text: `- ${i18n.__('label-select-category')} -` }));
+
+    (categories || []).forEach((cat) => {
+        const name = cat.category ? cat.category.name : '-';
+        // A category without a tournament code cannot be imported into the chrono.
+        const suffix = cat.external_tournament_code ? '' : ` (${i18n.__('label-no-tournament-code')})`;
         $select.append($('<option>', {
             value: cat.external_tournament_code || '',
-            text: catName + hasCode,
+            text: `${name}${suffix}`,
             disabled: !cat.external_tournament_code
         }));
     });
 };
 
+// Fills the race dropdown with the organizer races scheduled for today.
+const populateRaceSelect = (races) => {
+    companionRaces = races || [];
+
+    const $select = $('#js-companion-race-select');
+    $select.empty();
+    $select.append($('<option>', { value: '', text: `- ${i18n.__('label-select-race')} -` }));
+
+    if (companionRaces.length === 0) {
+        $select.append($('<option>', { value: '', text: i18n.__('label-no-races'), disabled: true }));
+    }
+    else {
+        companionRaces.forEach((race) => {
+            $select.append($('<option>', {
+                value: race.id,
+                text: `${race.name} (${race.participant_count} ${i18n.__('label-tournament-players').toLowerCase()})`
+            }));
+        });
+    }
+
+    populateCategorySelect([]);
+};
+
+// Shows the Companion badge and race picker for an authenticated organizer.
+const companionLoggedIn = (user) => {
+    const displayName = user.display_name || user.first_name || user.name || user.email || '-';
+    $('#tag-companion-status').removeClass('is-light').addClass('is-success').text(displayName);
+    $('#js-companion-user').text(displayName);
+    $('#js-companion-banner').hide();
+    $('#js-companion-login-section').hide();
+    $('#js-companion-race-section').show();
+};
+
+// Resets the Companion badge and shows the login prompt in place of the race picker.
+// The setup-tab invite comes back too, unless it was closed earlier this session.
+const companionLoggedOut = () => {
+    companionRaces = [];
+    $('#tag-companion-status').removeClass('is-success').addClass('is-light')
+        .text(i18n.__('tag-not-connected'));
+    $('#js-companion-user').text('-');
+    $('#js-companion-race-section').hide();
+    $('#js-companion-login-section').show();
+    if (!companionBannerDismissed) {
+        $('#js-companion-banner').show();
+    }
+    $('#js-companion-race-select').empty();
+    $('#js-companion-category-select').empty();
+    hideVersionBanners();
+};
+
+// Hides both chrono version banners.
+const hideVersionBanners = () => {
+    $('#js-version-update-banner').hide();
+    $('#js-version-blocked-banner').hide();
+};
+
+// Renders the outcome of a chrono version check as a banner.
+const showVersionCheck = (data) => {
+    hideVersionBanners();
+    if (!data) return;
+
+    const blocked = data.status === 'blocked';
+    if (!blocked && data.status !== 'update_available') return;
+
+    const prefix = blocked ? '#js-version-blocked' : '#js-version-update';
+    const version = blocked ? data.min_version : data.recommended_version;
+    const detail = blocked ? 'version-blocked-detail' : 'version-update-detail';
+
+    $(`${prefix}-message`).text(` ${i18n.__(detail).replace('{{version}}', version)}`);
+    if (data.download_url) {
+        $(`${prefix}-link`).attr('href', data.download_url).show();
+    }
+    else {
+        $(`${prefix}-link`).hide();
+    }
+    $(`${prefix}-banner`).show();
+};
+
+// Loads the organizer races for today and runs the version check.
+const refreshCompanionData = () => {
+    companionApi.fetchTodayRaces((races) => {
+        populateRaceSelect(races);
+    }, () => {
+        populateRaceSelect([]);
+    });
+    companionApi.checkVersion(showVersionCheck);
+};
+
+// Restores a stored Companion session and revalidates it in the background.
+const initCompanion = () => {
+    companionAuth.init();
+
+    if (!companionAuth.isLoggedIn()) {
+        companionLoggedOut();
+        return;
+    }
+
+    companionLoggedIn(companionAuth.getUser());
+    refreshCompanionData();
+
+    companionAuth.validate((user) => {
+        companionLoggedIn(user);
+    }, () => {
+        log.info('[Companion] Stored session is no longer valid');
+        companionLoggedOut();
+    });
+};
+
+// Registers UI event handlers using the supplied renderer dependencies.
+const setupEventHandlers = (deps) => {
+    const { client, storage, configuration, startRaceCallback } = deps;
+
+    // Race setup tab: start the browser login flow from the Companion section.
+    $('.js-companion-login').on('click', () => {
+        companionAuth.loginWithBrowser((user) => {
+            companionLoggedIn(user);
+            refreshCompanionData();
+        }, (error) => {
+            const message = error === 'unauthorized' ? 'dialog-login-unauthorized' : 'dialog-login-error';
+            window.electronAPI.showMessageBoxSync({
+                type: 'error',
+                title: 'Error',
+                message: i18n.__(message),
+                buttons: ['Ok']
+            });
+        });
+    });
+
+    // Race setup tab: hide the Companion invite for the rest of this session.
+    $('#js-companion-banner-close').on('click', () => {
+        companionBannerDismissed = true;
+        $('#js-companion-banner').hide();
+    });
+
+    // Race setup tab: drop the Companion session, after confirmation.
+    $('#js-companion-logout').on('click', () => {
+        const result = window.electronAPI.showMessageBoxSync({
+            type: 'warning',
+            message: i18n.__('dialog-companion-logout'),
+            buttons: ['Ok', 'Cancel']
+        });
+        if (result !== 0) return;
+
+        companionAuth.logout();
+        companionLoggedOut();
+    });
+
+    // Dismiss the optional-update banner.
+    $('#js-version-update-close').on('click', () => {
+        $('#js-version-update-banner').hide();
+    });
+
+    // Companion race selected: show its categories.
+    $('#js-companion-race-select').on('change', (e) => {
+        const raceId = $(e.currentTarget).val();
+        const race = companionRaces.find((r) => { return String(r.id) === String(raceId); });
+        populateCategorySelect(race ? race.categories : []);
+    });
+
+    // Load the tournament behind the selected Companion category.
+    $('#js-companion-load-tournament').on('click', () => {
+        const code = $('#js-companion-category-select').val();
+        if (!code) return;
+        log.info('[Race setup] Loading tournament from Companion', { code: code });
+        client.loadTournament(code);
+    });
+
+    // tabs
+    $('.tabs a').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        const tab = $this.closest('li').data('tab');
+        gotoTab(tab);
+    });
+
+    $('#js-racer-search').on('input', filterPlayerList);
+
+    // Modals
+    $('.open-modal').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        openModal($this.data('modal'));
+        initModal($this.data('modal'));
+    });
+
+    $('.close-modal').on('click', closeAllModals);
+
+    // Load race
+    $(document).on('click', '.js-load-race', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        const filename = $this.data('filename');
+        log.info('[Race setup] Opening race', { filename: filename });
+        client.openRace(filename, closeAllModals);
+    });
+
+    // Delete race
+    $(document).on('click', '.js-delete-race', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        const result = window.electronAPI.showMessageBoxSync({
+            type: 'warning',
+            message: i18n.__('dialog-delete-race'),
+            buttons: ['Ok', 'Cancel']
+        });
+        if (result === 0) {
+            const filename = $this.data('filename');
+            storage.deleteRace(filename);
+            closeAllModals();
+        }
+    });
+
+    // Load track
+    $('#js-load-track').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        const code = $('#js-input-track-code').val().slice(-6);
+        log.info('[Race setup] Loading remote track', { code: code });
+        client.loadTrack(code);
+    });
+
+    // Save manual track
+    $('#js-track-save-manual').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        const $length = $('#js-track-length-manual');
+        const $order = $('#js-track-order-manual');
+        const $orderSelect = $order.parent('.select');
+        const hasLength = $length.val().trim();
+        const hasOrder = $order.val();
+
+        $length.removeClass('is-danger');
+        $orderSelect.removeClass('is-danger');
+        if (!hasLength || !hasOrder) {
+            if (!hasLength) $length.addClass('is-danger');
+            if (!hasOrder) $orderSelect.addClass('is-danger');
+            return;
+        }
+        const result = window.electronAPI.showMessageBoxSync({
+            type: 'warning',
+            message: i18n.__('dialog-save-track'),
+            buttons: ['Ok', 'Cancel']
+        });
+        if (result === 0) {
+            const length = parseFloat(hasLength.replace(',', '.'));
+            const order = hasOrder.split('-').map((i) => { return parseInt(i); });
+            log.info('[Race setup] Saving manual track', { length: length, order: order });
+            client.setTrackManual(length, order);
+        }
+    });
+
+    // Load tournament
+    $('#js-load-tournament').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        const code = $('#js-input-tournament-code').val().slice(-6);
+        log.info('[Race setup] Loading remote tournament', { code: code });
+        client.loadTournament(code);
+    });
+
+    // New race
+    $('#button-new-race').on('click', () => {
+        const name = $('#modal-new-name').val().trim();
+        if (name === '') return false;
+        log.info('[Race setup] Creating new race', { name: name });
+        client.reset(name, closeAllModals);
+    });
+
+    // Start race
+    $('#button-start').on('click', startRaceCallback);
+
+    // Stop race
+    $('#button-stop').on('click', () => {
+        client.stopRace();
+    });
+
+    // Previous round
+    $('#button-prev').on('click', () => {
+        client.prevRound();
+    });
+
+    // Next round
+    $('#button-next').on('click', () => {
+        client.nextRound();
+    });
+
+    // Toggle free round
+    $('#button-toggle-free-round').on('click', () => {
+        client.toggleFreeRound();
+    });
+
+    // Requests the native print dialog for the current window.
+    $('#button-print').on('click', () => {
+        window.electronAPI.print();
+    });
+
+    // Exports the tournament and offers to open the export folder.
+    $('#button-xls').on('click', async () => {
+        const $button = $('#button-xls');
+        $button.attr('disabled', true);
+
+        try {
+            const filename = await client.saveXls();
+            if (filename) {
+                openModal('modal-xls-exported');
+            }
+        } catch (error) {
+            console.error('[Export] Unable to save Excel file:', error);
+        } finally {
+            $button.removeAttr('disabled');
+        }
+    });
+
+    // Open XLS folder
+    $('#button-xls-folder').on('click', async () => {
+        const xls = require('./export');
+        const dir = await xls.createDir();
+        window.electronAPI.openPath(dir);
+    });
+
+    // Opens the folder containing the newly exported Excel file.
+    $('#button-open-xls-export-folder').on('click', async () => {
+        const xls = require('./export');
+        const dir = await xls.createDir();
+        await window.electronAPI.openPath(dir);
+        closeAllModals();
+    });
+
+    // Open log file
+    $('#button-log-file').on('click', async () => {
+        const logFilePath = await window.electronAPI.getLogFilePath();
+        await window.electronAPI.openPath(logFilePath);
+    });
+
+    // Updates threshold estimates from the settings form.
+    const updateThresholds = () => {
+        const timeThreshold = parseFloat($('#js-settings-time-threshold').val().replace(',', '.'));
+        const speedThreshold = parseFloat($('#js-settings-speed-threshold').val().replace(',', '.'));
+        const roundLaps = parseInt($('#js-settings-round-laps').val());
+        if (isNaN(timeThreshold) || isNaN(speedThreshold)) return;
+        showThresholds(timeThreshold, speedThreshold, roundLaps);
+    };
+
+    $('#js-settings-speed-threshold').on('keyup', updateThresholds);
+    $('#js-settings-time-threshold').on('keyup', updateThresholds);
+    $('#js-settings-round-laps').on('change', updateThresholds);
+
+    // Save settings
+    $('#button-save-settings').on('click', (e) => {
+        const timeThreshold = parseFloat($('#js-settings-time-threshold').val().replace(',', '.'));
+        const speedThreshold = parseFloat($('#js-settings-speed-threshold').val().replace(',', '.'));
+        const startDelay = parseFloat($('#js-settings-start-delay').val().replace(',', '.'));
+        const roundLaps = parseInt($('#js-settings-round-laps').val());
+        log.info('[Race setup] Saving race settings', {
+            timeThreshold: timeThreshold,
+            speedThreshold: speedThreshold,
+            startDelay: startDelay,
+            roundLaps: roundLaps
+        });
+        storage.set('timeThreshold', timeThreshold);
+        storage.set('speedThreshold', speedThreshold);
+        storage.set('startDelay', startDelay);
+        storage.set('roundLaps', roundLaps);
+        showThresholds();
+        e.preventDefault();
+    });
+
+    // Save configuration
+    $('#button-save-config').on('click', (e) => {
+        e.preventDefault();
+        configuration.set('reverse', $('#js-config-reverse').is(':checked') ? 1 : 0);
+        configuration.set('sensorPin1', parseInt($('#js-config-sensor-pin-1').val()));
+        configuration.set('sensorPin2', parseInt($('#js-config-sensor-pin-2').val()));
+        configuration.set('sensorPin3', parseInt($('#js-config-sensor-pin-3').val()));
+        configuration.set('ledPin1', parseInt($('#js-config-led-pin-1').val()));
+        configuration.set('piezoPin', parseInt($('#js-config-piezo-pin').val()));
+        configuration.set('startButtonPin', parseInt($('#js-config-start-button-pin').val()));
+        configuration.set('title', $('#js-config-title').val());
+        configuration.set('tab', $('#js-config-starting-tab').val());
+        configuration.set('usbPort', $('#js-config-usb-port').val(), (error) => {
+            if (error) {
+                return;
+            }
+            window.electronAPI.showMessageBoxSync({
+                type: 'warning',
+                message: i18n.__('dialog-save-restart'),
+                buttons: ['Ok']
+            });
+            location.reload();
+        });
+    });
+
+    // Saves the boot-time USB port selection before reloading the application.
+    $('#button-save-boot-usb-port').on('click', (e) => {
+        const $button = $(e.currentTarget);
+        $button.prop('disabled', true);
+        configuration.set('usbPort', $('#js-config-usb-port').val(), (error) => {
+            if (error) {
+                $button.prop('disabled', false);
+                return;
+            }
+            window.electronAPI.showMessageBoxSync({
+                type: 'warning',
+                message: i18n.__('dialog-save-restart'),
+                buttons: ['Ok']
+            });
+            location.reload();
+        });
+        e.preventDefault();
+    });
+
+    // Save manches
+    $('#button-manches-save').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        client.overrideTimes();
+        window.electronAPI.showMessageBoxSync({
+            type: 'warning',
+            message: i18n.__('dialog-saved'),
+            buttons: ['Ok']
+        });
+    });
+
+    // Go to round
+    $(document).on('click', '.js-goto-round', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        const mindex = $this.data('manche');
+        const rindex = $this.data('round');
+        client.gotoRound(mindex, rindex);
+    });
+
+    // LED animation selection
+    $('.js-led-animation').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        $('.js-led-animation').removeClass('is-primary');
+        $this.addClass('is-primary');
+        const type = $this.data('led-animation');
+        configuration.set('ledAnimation', type);
+    });
+
+    // Race mode selection
+    $('.js-race-mode').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        $('.js-race-mode').removeClass('is-primary');
+        $this.addClass('is-primary');
+        const mode = $this.data('race-mode');
+        storage.set('raceMode', mode);
+        showRaceModeDetails();
+    });
+
+    // Invalidate/disqualify
+    $('.js-invalidate').on('click', (e) => {
+        const $this = $(e.currentTarget);
+        if ($this.attr('disabled')) return;
+        const result = window.electronAPI.showMessageBoxSync({
+            type: 'warning',
+            message: i18n.__('dialog-disqualify'),
+            buttons: ['Ok', 'Cancel']
+        });
+        if (result === 0) {
+            client.disqualify(null, null, parseInt($this.data('lane')));
+        }
+    });
+};
+
 module.exports = {
     boardConnected: boardConnected,
-    boardDisonnected: boardDisonnected,
+    debugModeEnabled: debugModeEnabled,
+    boardDisconnected: boardDisconnected,
+    showBootPortSelection: showBootPortSelection,
     translate: translate,
     gotoTab: gotoTab,
     init: init,
     initModal: initModal,
+    setupEventHandlers: setupEventHandlers,
+    initCompanion: initCompanion,
     toggleFreeRound: toggleFreeRound,
     trackLoadDone: trackLoadDone,
     trackLoadFail: trackLoadFail,
@@ -694,8 +1305,5 @@ module.exports = {
     showNextRoundNames: showNextRoundNames,
     initRace: initRace,
     drawRace: drawRace,
-    showLoggedIn: showLoggedIn,
-    showLoggedOut: showLoggedOut,
-    populateRaceSelect: populateRaceSelect,
-    populateCategorySelect: populateCategorySelect
+    updateRaceStatus: updateRaceStatus
 };
