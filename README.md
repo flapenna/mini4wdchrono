@@ -1,7 +1,7 @@
 # Mini4wdChrono
 
-[![Version](https://img.shields.io/github/package-json/v/Pimentoso/mini4wdchrono)](https://github.com/Pimentoso/mini4wdchrono/releases)
-[![License](https://img.shields.io/github/license/Pimentoso/mini4wdchrono)](LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/flapenna/mini4wdchrono)](https://github.com/flapenna/mini4wdchrono/releases)
+[![License](https://img.shields.io/github/license/flapenna/mini4wdchrono)](LICENSE)
 
 Mini4wdChrono is a free, open-source desktop application for timing and managing
 Mini 4WD races on three-lane Japan Cup tracks. It combines Arduino-based lap
@@ -24,22 +24,22 @@ optional start button, LED strip, and buzzer to the application.
 
 See the project wiki for complete assembly and setup instructions:
 
-- [Required hardware](https://github.com/Pimentoso/mini4wdchrono/wiki/Hardware-parts-needed)
-- [Wiring diagrams](https://github.com/Pimentoso/mini4wdchrono/wiki/Hardware-diagrams)
-- [Flashing the Arduino](https://github.com/Pimentoso/mini4wdchrono/wiki/Flashing-the-arduino-board)
-- [Building the lap timer](https://github.com/Pimentoso/mini4wdchrono/wiki/Lap-timer-building)
-- [Launching the software](https://github.com/Pimentoso/mini4wdchrono/wiki/Launching-the-software)
+- [Required hardware](https://github.com/flapenna/mini4wdchrono/wiki/Hardware-parts-needed)
+- [Wiring diagrams](https://github.com/flapenna/mini4wdchrono/wiki/Hardware-diagrams)
+- [Flashing the Arduino](https://github.com/flapenna/mini4wdchrono/wiki/Flashing-the-arduino-board)
+- [Building the lap timer](https://github.com/flapenna/mini4wdchrono/wiki/Lap-timer-building)
+- [Launching the software](https://github.com/flapenna/mini4wdchrono/wiki/Launching-the-software)
 
 ## Download
 
 Download a packaged build for your operating system from the
-[GitHub Releases page](https://github.com/Pimentoso/mini4wdchrono/releases).
+[GitHub Releases page](https://github.com/flapenna/mini4wdchrono/releases).
 Available platforms may vary by release.
 
 ## Getting started
 
 1. Build and flash the Arduino hardware by following the
-   [hardware guides](https://github.com/Pimentoso/mini4wdchrono/wiki).
+   [hardware guides](https://github.com/flapenna/mini4wdchrono/wiki).
 2. Connect the Arduino to your computer over USB.
 3. Launch Mini4wdChrono and open the **Configuration** tab.
 4. Select the serial port and configure the sensor pins and any optional hardware.
@@ -51,8 +51,8 @@ Available platforms may vary by release.
    load its link as well.
 
 For more detail, see the
-[software quick-start guide](https://github.com/Pimentoso/mini4wdchrono/wiki/Software-quick-start-guide)
-and [tournament rules](https://github.com/Pimentoso/mini4wdchrono/wiki/Software-tournament-rules).
+[software quick-start guide](https://github.com/flapenna/mini4wdchrono/wiki/Software-quick-start-guide)
+and [tournament rules](https://github.com/flapenna/mini4wdchrono/wiki/Software-tournament-rules).
 
 ## Screenshots
 
@@ -155,7 +155,7 @@ After preparing the operating system, clone the repository, install the locked
 dependencies, and start Electron:
 
 ```bash
-git clone https://github.com/Pimentoso/mini4wdchrono.git
+git clone https://github.com/flapenna/mini4wdchrono.git
 cd mini4wdchrono
 npm ci
 npm start
@@ -202,7 +202,7 @@ Bug reports and pull requests are welcome. Before opening a pull request:
 3. Run `npm run lint:fix` followed by `npm run lint`.
 4. Describe the change, how it was tested, and any hardware used for testing.
 
-Please use [GitHub Issues](https://github.com/Pimentoso/mini4wdchrono/issues) for bugs and feature requests.
+Please use [GitHub Issues](https://github.com/flapenna/mini4wdchrono/issues) for bugs and feature requests.
 
 ## License
 
