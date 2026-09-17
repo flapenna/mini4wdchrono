@@ -19,6 +19,7 @@ const CONFIG_KEYS = [
     'reverse',
     'title',
     'tab',
+    'theme',
     'usbPort',
     'raceFile',
     'companionToken',

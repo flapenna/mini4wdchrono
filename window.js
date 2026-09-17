@@ -102,7 +102,10 @@ const CONFIG_DEFAULTS = {
     'startButtonPin': 0,
     'reverse': 0,
     'title': 'MINI4WD CHRONO',
-    'tab': 'setup'
+    'tab': 'setup',
+    // No default: the first launch follows the OS preference, then the choice
+    // made with the navbar toggle is stored here.
+    'theme': null
 };
 
 function sleep(millis) {
@@ -231,6 +234,9 @@ async function runLedAnimation(animation) {
 function createWindow() {
     // Create the browser window.
     mainWindow = new BrowserWindow({
+        // Below these the race view's three lane cards stop fitting side by side.
+        minWidth: 960,
+        minHeight: 640,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -247,9 +253,9 @@ function createWindow() {
         slashes: true
     }));
 
-    // Maximize.
+    // Open maximized, but leave the window resizable so the platform's own
+    // zoom and full-screen controls stay available.
     mainWindow.maximize();
-    mainWindow.setResizable(false);
 
     // Open the DevTools.
     // mainWindow.webContents.openDevTools();
@@ -1349,9 +1355,14 @@ ipcMain.handle('window-close', () => {
     if (mainWindow) mainWindow.close();
 });
 
-// Prints the WebContents that requested the operation.
+// Prints the WebContents that requested the operation. The promise settles once
+// the job is done or cancelled, so the renderer knows when to restore its theme.
 ipcMain.handle('window-print', (event) => {
-    event.sender.print();
+    return new Promise((resolve) => {
+        event.sender.print({}, (success, failureReason) => {
+            resolve({ success: success, failureReason: failureReason });
+        });
+    });
 });
 
 // Shell operations
