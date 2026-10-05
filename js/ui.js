@@ -9,6 +9,10 @@ const log = require('./logger');
 const companionAuth = require('./companion_auth');
 const companionApi = require('./companion_api');
 
+// Mirror of the persisted "theme" setting, read by the bootstrap script in
+// index.html so the window opens on the right palette instead of flashing.
+const THEME_CACHE_KEY = 'mini4wdchrono-theme';
+
 // Races returned by the last Companion "today" lookup, indexed by race id.
 let companionRaces = [];
 
@@ -94,9 +98,46 @@ const gotoTab = (tab) => {
     $(`div[data-tab=${tab}]`).show();
 };
 
+// Returns the palette currently painted on the document.
+const activeTheme = () => {
+    const theme = document.documentElement.getAttribute('data-theme');
+    return theme === 'dark' ? 'dark' : 'light';
+};
+
+// Paints a palette and keeps the pre-paint cache read by index.html in sync.
+const paintTheme = (theme) => {
+    const next = theme === 'dark' ? 'dark' : 'light';
+
+    document.documentElement.setAttribute('data-theme', next);
+    $('.js-theme-option').each(function () {
+        $(this).attr('aria-pressed', String($(this).data('themeValue') === next));
+    });
+
+    try {
+        window.localStorage.setItem(THEME_CACHE_KEY, next);
+    } catch (error) {
+        log.warn('[Theme] Could not cache the theme for the next launch:', error);
+    }
+
+    return next;
+};
+
+// Restores the saved palette, keeping the first-launch OS preference otherwise.
+const initTheme = () => {
+    paintTheme(configuration.get('theme') || activeTheme());
+};
+
+// Switches palette and remembers the choice for the next launch.
+const setTheme = (theme) => {
+    configuration.set('theme', paintTheme(theme));
+};
+
 // Initializes UI controls from cached configuration and race data.
 const init = () => {
     translate();
+    initTheme();
+    $('#js-theme-light').attr({ 'title': i18n.__('label-theme-light'), 'aria-label': i18n.__('label-theme-light') });
+    $('#js-theme-dark').attr({ 'title': i18n.__('label-theme-dark'), 'aria-label': i18n.__('label-theme-dark') });
 
     const title_text = [configuration.get('title'), storage.get('name')]
         .filter((value) => value !== null && value !== undefined && value !== '')
@@ -979,6 +1020,11 @@ const setupEventHandlers = (deps) => {
         client.loadTournament(code);
     });
 
+    // Navbar: pick the light or the dark palette.
+    $('.js-theme-option').on('click', (e) => {
+        setTheme($(e.currentTarget).data('themeValue'));
+    });
+
     // tabs
     $('.tabs a').on('click', (e) => {
         const $this = $(e.currentTarget);
@@ -1101,9 +1147,18 @@ const setupEventHandlers = (deps) => {
         client.toggleFreeRound();
     });
 
-    // Requests the native print dialog for the current window.
-    $('#button-print').on('click', () => {
-        window.electronAPI.print();
+    // Requests the native print dialog for the current window. Paper is always
+    // white, so the sheet is rendered on the light palette whatever is onscreen.
+    $('#button-print').on('click', async () => {
+        const screenTheme = activeTheme();
+        document.documentElement.setAttribute('data-theme', 'light');
+        try {
+            await window.electronAPI.print();
+        } catch (error) {
+            log.error('[Print] Printing failed:', error);
+        } finally {
+            document.documentElement.setAttribute('data-theme', screenTheme);
+        }
     });
 
     // Exports the tournament and offers to open the export folder.

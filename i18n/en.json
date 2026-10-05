@@ -17,6 +17,8 @@
 	"tab-manches-list": "Manches list",
 	"tab-configuration": "Configuration",
 	"tab-about": "About",
+	"label-theme-light": "Light theme",
+	"label-theme-dark": "Dark theme",
 	"button-new-race": "New race",
 	"button-open-race": "Open race...",
 	"button-create-race": "Create race",
