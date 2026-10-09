@@ -71,20 +71,58 @@ const addFinalsFields = (body, tournament, mancheIndex, roundIndex) => {
     body.finals_round_number = roundIndex + 1;
 };
 
+// Returns the lane (1-based) the car runs in for each of its laps, or null when
+// the track lane order is unknown. A car changes lane every lap following that
+// order, so the starting lane alone does not say where a lap was run.
+const buildSplitLanes = (startLane, lapCount) => {
+    const track = storage.get('track');
+    const order = track && Array.isArray(track.order) ? track.order : null;
+    if (!order || order.length === 0) {
+        return null;
+    }
+
+    // The chrono numbers lanes from zero internally; the track order and the API
+    // both number them from one.
+    const startIndex = order.indexOf(startLane + 1);
+    if (startIndex === -1) {
+        // Lane absent from the order, as on a same-lane (1-1-1) track: the car
+        // stays in the lane it started from, exactly as chrono.nextLane does.
+        return new Array(lapCount).fill(startLane + 1);
+    }
+
+    const lanes = [];
+    for (let lap = 0; lap < lapCount; lap++) {
+        lanes.push(order[(startIndex + lap) % order.length]);
+    }
+    return lanes;
+};
+
 // Converts a stored round into the list of results expected by the API.
 const buildResults = (cars, players) => {
     const results = [];
-    cars.forEach((car) => {
+    cars.forEach((car, index) => {
         if (car.playerId === -1 || car.playerId === null || car.playerId === undefined) {
             // Empty lane, nothing to report.
             return;
         }
         const isDnf = car.outOfBounds === true || car.currTime === DNF_TIME;
-        results.push({
+        const result = {
             car_name: players[car.playerId],
             lap_time: isDnf ? null : car.currTime / 1000,
             is_dnf: isDnf
-        });
+        };
+        // Split times are only trustworthy for cars timed by the sensors: a time
+        // edited by hand (originalTime set) no longer matches the recorded splits.
+        if (!isDnf && car.originalTime === undefined && Array.isArray(car.splitTimes) && car.splitTimes.length > 0) {
+            result.split_times = car.splitTimes.map((t) => Math.round(t) / 1000);
+            // Cars are stored in starting-lane order, so the index is the fallback.
+            const startLane = car.startLane === undefined ? index : car.startLane;
+            const splitLanes = buildSplitLanes(startLane, result.split_times.length);
+            if (splitLanes) {
+                result.split_lanes = splitLanes;
+            }
+        }
+        results.push(result);
     });
     return results;
 };

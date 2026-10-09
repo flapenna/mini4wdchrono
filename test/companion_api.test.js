@@ -194,12 +194,109 @@ describe('companion round submission', () => {
         assert.equal(ajax.requests.length, 0);
     });
 
+    test('reports the split times in seconds for cars that finished', async () => {
+        const race = clone(tournamentRace);
+        race.race.m0.r0[0].splitTimes = [2401, 2399, 2450];
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        assert.deepEqual(ajax.bodyOf(0).results[0], {
+            car_name: 'Ada', lap_time: 7.25, is_dnf: false, split_times: [2.401, 2.399, 2.45]
+        });
+    });
+
+    test('omits the split times of cars without splits or that did not finish', async () => {
+        const race = clone(tournamentRace);
+        race.race.m0.r0[1].splitTimes = [2401];
+        race.race.m0.r0[2].splitTimes = [];
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        assert.equal('split_times' in ajax.bodyOf(0).results[1], false);
+        assert.equal('split_times' in ajax.bodyOf(0).results[2], false);
+    });
+
+    test('omits the split times of cars whose time was edited by hand', async () => {
+        const race = clone(tournamentRace);
+        race.race.m0.r0[0].splitTimes = [2401, 2399, 2450];
+        race.race.m0.r0[0].originalTime = 7300;
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        assert.deepEqual(ajax.bodyOf(0).results[0], { car_name: 'Ada', lap_time: 7.25, is_dnf: false });
+    });
+
     test('does nothing for a round that has no stored results', async () => {
         const { api, ajax } = await bootWithRace(tournamentRace);
 
         api.submitRoundResult(2, 0);
 
         assert.equal(ajax.requests.length, 0);
+    });
+
+    test('reports the lane of every lap following the track lane order', async () => {
+        const race = clone(tournamentRace);
+        race.track = { length: 160, order: [1, 2, 3] };
+        race.race.m0.r0[0].splitTimes = [2401, 2399, 2450];
+        race.race.m0.r0[2].splitTimes = [2600, 2600, 2610];
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        // Ada starts in lane 1 and Carla in lane 3: both rotate 1-2-3-1.
+        // results[1] is Bruno, who retired.
+        assert.deepEqual(ajax.bodyOf(0).results[0].split_lanes, [1, 2, 3]);
+        assert.deepEqual(ajax.bodyOf(0).results[2].split_lanes, [3, 1, 2]);
+    });
+
+    test('follows a reversed track lane order', async () => {
+        const race = clone(tournamentRace);
+        race.track = { length: 160, order: [1, 3, 2] };
+        race.race.m0.r0[2].splitTimes = [2600, 2600, 2610];
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        // Carla starts in lane 3, which sits second in a 1-3-2-1 rotation.
+        assert.deepEqual(ajax.bodyOf(0).results[2].split_lanes, [3, 2, 1]);
+    });
+
+    test('keeps a car in its own lane on a same-lane track', async () => {
+        const race = clone(tournamentRace);
+        race.track = { length: 160, order: [1, 1, 1] };
+        race.race.m0.r0[0].splitTimes = [2401, 2399, 2450];
+        race.race.m0.r0[2].splitTimes = [2600, 2600, 2610];
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        assert.deepEqual(ajax.bodyOf(0).results[0].split_lanes, [1, 1, 1]);
+        assert.deepEqual(ajax.bodyOf(0).results[2].split_lanes, [3, 3, 3]);
+    });
+
+    test('omits the lanes when the track lane order is unknown', async () => {
+        const race = clone(tournamentRace);
+        race.race.m0.r0[0].splitTimes = [2401, 2399, 2450];
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        assert.equal('split_lanes' in ajax.bodyOf(0).results[0], false);
+    });
+
+    test('omits the lanes of a car whose splits were dropped', async () => {
+        const race = clone(tournamentRace);
+        race.track = { length: 160, order: [1, 2, 3] };
+        race.race.m0.r0[0].splitTimes = [2401, 2399, 2450];
+        race.race.m0.r0[0].originalTime = 7300;
+        const { api, ajax } = await bootWithRace(race);
+
+        api.submitRoundResult(0, 0);
+
+        assert.equal('split_lanes' in ajax.bodyOf(0).results[0], false);
     });
 });
 
