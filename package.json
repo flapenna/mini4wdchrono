@@ -46,9 +46,6 @@
     "url": "https://github.com/flapenna/mini4wdchrono/issues"
   },
   "homepage": "https://github.com/flapenna/mini4wdchrono#readme",
-  "directories": {
-    "test": "test"
-  },
   "keywords": [],
   "engines": {
     "node": ">=22.13.0"
